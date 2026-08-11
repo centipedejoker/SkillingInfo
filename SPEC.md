@@ -1060,7 +1060,7 @@ Recommended: "Tracks personal skilling sessions, XP rates, idle time, activity o
 - **No retroactive item-flow buffering.** §6/§10 allow "buffered output events where safe" from the candidate window, but Phase 2 only tracks item flow from the moment a session formally starts — buffering items in parallel with the XP candidate buffer is deferred as unnecessary complexity for now.
 - Not yet done: the reconciliation invariant (§52) and unclassified-movement handling (§50 [v4]) have nothing to validate against until Phase 3/4 add pickup and bank correlation — Phase 2's `OTHER_INVENTORY_GAIN`/`OTHER_INVENTORY_LOSS` paths are effectively unreachable until then, which is expected, not a gap.
 
-**Phase 3** ✅ — ground-item tracker; confirmed pickup correlation (§20a); repickup handling.
+**Phase 3** ✅ **live-validated** — ground-item tracker; confirmed pickup correlation (§20a); repickup handling. Pickup confirmation (including the widened travel-time timeout), repickup offsetting, and the net-only UI all confirmed working in real gameplay.
 
 `[v7]` Implementation notes and simplifications, mirroring Phase 2's pattern:
 - **`GroundItemTracker`** is built against real events (`ItemSpawned`/`ItemDespawned`/`ItemQuantityChanged`, keyed by tile+itemId) even though `PickupCorrelator` doesn't consume it yet — it exists now for §20b's ownership-based attribution confidence (`TileItem.getOwnership()`), which only becomes relevant once Phase 6 introduces multi-source combat loot. Known limitation: two players' distinct private drops of the same item on the same tile collapse to one tracked entry — acceptable, since §20b already prefers session-aggregate attribution over false precision in exactly that situation.
