@@ -1,8 +1,10 @@
 package com.skillinginfo.ui;
 
-import com.skillinginfo.SkillingInfoConfig;
 import com.skillinginfo.session.ActivitySession;
+import com.skillinginfo.session.FutureXpResolver;
 import com.skillinginfo.session.ItemFlowEntry;
+import com.skillinginfo.session.ItemUse;
+import com.skillinginfo.session.ItemUseStore;
 import com.skillinginfo.session.PromptSummary;
 import com.skillinginfo.session.SessionManager;
 import com.skillinginfo.session.SessionState;
@@ -16,7 +18,9 @@ import java.util.Map;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.DefaultComboBoxModel;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingConstants;
@@ -37,7 +41,7 @@ class CurrentView extends JPanel
 	private static final int BUTTON_HEIGHT = 24;
 
 	private final SessionManager sessionManager;
-	private final SkillingInfoConfig config;
+	private final ItemUseStore itemUseStore;
 	private final Map<Integer, String> itemNames;
 	private final Runnable onAction;
 
@@ -59,10 +63,10 @@ class CurrentView extends JPanel
 	private final JPanel itemFlowPanel = new JPanel();
 	private final JPanel futureXpPanel = new JPanel();
 
-	CurrentView(SessionManager sessionManager, SkillingInfoConfig config, Map<Integer, String> itemNames, Runnable onAction)
+	CurrentView(SessionManager sessionManager, ItemUseStore itemUseStore, Map<Integer, String> itemNames, Runnable onAction)
 	{
 		this.sessionManager = sessionManager;
-		this.config = config;
+		this.itemUseStore = itemUseStore;
 		this.itemNames = itemNames;
 		this.onAction = onAction;
 
@@ -276,9 +280,49 @@ class CurrentView extends JPanel
 			JLabel line = new JLabel(ItemFlowFormat.line(name, entry));
 			line.setFont(FontManager.getRunescapeSmallFont());
 			itemFlowPanel.add(line);
+
+			// only items with a genuine decision get a selector - a
+			// dropdown on every row would be the clutter §65 warns about
+			if (FutureXpResolver.hasChoice(entry.getItemId()))
+			{
+				itemFlowPanel.add(buildUseSelector(entry.getItemId()));
+			}
 		}
 		itemFlowPanel.revalidate();
 		itemFlowPanel.repaint();
+	}
+
+	/**
+	 * Inline per-item future-XP selector (SPEC.md §33/§35). Lives next to
+	 * the item rather than in the RuneLite config screen: the set of
+	 * choosable items isn't known ahead of time, and the choice only makes
+	 * sense in the context of the item it applies to - the same reasoning
+	 * banked-experience uses for its per-item activity picker (§5).
+	 */
+	private JComboBox<ItemUse> buildUseSelector(int itemId)
+	{
+		List<ItemUse> options = FutureXpResolver.getSelectableUses(itemId);
+		JComboBox<ItemUse> combo = new JComboBox<>(new DefaultComboBoxModel<>(options.toArray(new ItemUse[0])));
+		combo.setFont(FontManager.getRunescapeSmallFont());
+		combo.setSelectedItem(itemUseStore.get(itemId));
+		combo.setMaximumSize(new Dimension(Integer.MAX_VALUE, BUTTON_HEIGHT));
+		combo.setRenderer((list, value, index, selected, focused) -> {
+			JLabel label = new JLabel(value == null ? "" : value.label);
+			label.setFont(FontManager.getRunescapeSmallFont());
+			label.setOpaque(true);
+			label.setBackground(selected ? ColorScheme.DARKER_GRAY_HOVER_COLOR : ColorScheme.DARKER_GRAY_COLOR);
+			label.setForeground(ColorScheme.TEXT_COLOR);
+			return label;
+		});
+		combo.addActionListener(e -> {
+			ItemUse chosen = (ItemUse) combo.getSelectedItem();
+			if (chosen != null)
+			{
+				itemUseStore.set(itemId, chosen);
+				onAction.run();
+			}
+		});
+		return combo;
 	}
 
 	/**
@@ -292,7 +336,7 @@ class CurrentView extends JPanel
 	{
 		futureXpPanel.removeAll();
 
-		List<FutureXpSummary.Row> rows = FutureXpSummary.build(session, config);
+		List<FutureXpSummary.Row> rows = FutureXpSummary.build(session, itemUseStore);
 		if (!rows.isEmpty())
 		{
 			JLabel header = new JLabel("Future XP");

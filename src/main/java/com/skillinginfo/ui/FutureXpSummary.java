@@ -1,9 +1,9 @@
 package com.skillinginfo.ui;
 
-import com.skillinginfo.SkillingInfoConfig;
 import com.skillinginfo.session.ActivitySession;
-import com.skillinginfo.session.FutureXpResolver;
 import com.skillinginfo.session.ItemFlowEntry;
+import com.skillinginfo.session.ItemUse;
+import com.skillinginfo.session.ItemUseStore;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
@@ -58,16 +58,17 @@ final class FutureXpSummary
 	{
 	}
 
-	static List<Row> build(ActivitySession session, SkillingInfoConfig config)
+	static List<Row> build(ActivitySession session, ItemUseStore itemUseStore)
 	{
 		Map<Skill, Double> totals = new EnumMap<>(Skill.class);
 		Map<Skill, Confidence> confidences = new EnumMap<>(Skill.class);
 
 		for (ItemFlowEntry entry : session.getItemFlow())
 		{
-			FutureXpResolver.FutureXp future = FutureXpResolver.resolve(entry.getItemId(), config);
-			if (future == null)
+			ItemUse use = itemUseStore.get(entry.getItemId());
+			if (use == null || use.skill == null)
 			{
+				// not catalogued, or the player switched this item off
 				continue;
 			}
 
@@ -79,10 +80,10 @@ final class FutureXpSummary
 			}
 			Confidence confidence = entry.getBanked() > 0 ? Confidence.CONFIRMED_BANKED : Confidence.RETAINED;
 
-			totals.merge(future.skill, qty * future.xpPerItem, Double::sum);
+			totals.merge(use.skill, qty * use.xpPerItem, Double::sum);
 			// a skill's headline can only be as strong as its weakest
 			// contributing item - never label a mixed total "banked"
-			confidences.merge(future.skill, confidence,
+			confidences.merge(use.skill, confidence,
 				(a, b) -> a.ordinal() >= b.ordinal() ? a : b);
 		}
 

@@ -3,6 +3,7 @@ package com.skillinginfo;
 import com.google.inject.Provides;
 import com.skillinginfo.session.ActivitySession;
 import com.skillinginfo.session.ItemFlowEntry;
+import com.skillinginfo.session.ItemUseStore;
 import com.skillinginfo.session.SessionManager;
 import com.skillinginfo.session.SessionRepository;
 import com.skillinginfo.ui.SkillingInfoPanel;
@@ -62,12 +63,16 @@ public class SkillingInfoPlugin extends Plugin
 	@Inject
 	private ItemManager itemManager;
 
+	@Inject
+	private ConfigManager configManager;
+
 	// Resolved on the client thread (see onGameTick) and read from the EDT
 	// by the panel - ItemManager.getItemComposition() asserts it's only
 	// ever called on the client thread, so the UI must never call it
 	// directly (caught live: SPEC.md v7 changelog).
 	private final Map<Integer, String> itemNames = new ConcurrentHashMap<>();
 
+	private ItemUseStore itemUseStore;
 	private SessionRepository sessionRepository;
 	private SessionManager sessionManager;
 	private SkillingInfoPanel panel;
@@ -82,12 +87,13 @@ public class SkillingInfoPlugin extends Plugin
 	@Override
 	protected void startUp()
 	{
+		itemUseStore = new ItemUseStore(configManager);
 		sessionRepository = new SessionRepository(client);
 		sessionManager = new SessionManager(config, sessionRepository);
 		sessionManager.init();
 
 		BufferedImage icon = buildIcon();
-		panel = new SkillingInfoPanel(sessionManager, skillIconManager, config, itemNames, icon);
+		panel = new SkillingInfoPanel(sessionManager, skillIconManager, itemUseStore, itemNames, icon);
 		panel.refresh();
 
 		navButton = NavigationButton.builder()

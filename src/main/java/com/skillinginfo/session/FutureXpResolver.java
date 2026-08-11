@@ -1,113 +1,127 @@
 package com.skillinginfo.session;
 
-import com.skillinginfo.SkillingInfoConfig;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import net.runelite.api.Skill;
 import net.runelite.api.gameval.ItemID;
 
 /**
- * Maps a banked/retained item to the XP it would eventually yield
- * (SPEC.md §33), deliberately narrowly.
+ * The catalogue of what each item can be turned into, and for how much XP
+ * (SPEC.md §33), kept deliberately narrow.
  * <p>
  * §35 forbids forcing a downstream mapping where an item has several
- * legitimate uses, which rules out most gathering output on its face -
- * logs alone can go to Firemaking, Fletching or Construction. The
- * resolution (§33 [v7]) is that genuinely unambiguous items are mapped
- * unconditionally, while ambiguous ones are driven by explicit user
- * config and can be switched off entirely. Anything not covered here
- * simply has no future-XP projection rather than a guessed one.
+ * legitimate uses - and it names logs (Firemaking/Fletching/Construction)
+ * as its own example, which covers most gathering output. The resolution
+ * is to catalogue each item's *concrete products* and let the player pick
+ * one per item, the way the banked-experience plugin does (§5). "Logs →
+ * Fletching" has no single XP value; "Logs → Longbow (u)" is exactly 10.
+ * Where an item genuinely has one use (raw fish), there's nothing to pick
+ * and it simply always resolves.
  * <p>
- * Deliberately NOT covered, and why:
- * <ul>
- *   <li>Fletching/Construction from logs - no single XP value per log,
- *       it depends entirely what you make.</li>
- *   <li>Ores → Smithing - bars need coal at varying ratios, so a
- *       per-ore value would be fiction.</li>
- *   <li>Herbs → Herblore - requires secondaries.</li>
- * </ul>
+ * Anything absent here shows no projection at all rather than a guessed
+ * one. Ores are omitted because bars need coal at varying ratios, and
+ * herbs because they need secondaries - neither has an honest per-item
+ * value, so undercovering is the correct outcome.
  * <p>
  * XP values verified against TheStonedTurtle's banked-experience plugin
- * (BSD 2-Clause), which maintains this data comprehensively - see §5.
- * Only unnoted item ids are mapped; noted stacks ({@code ItemID.Cert.*})
- * are a different id and won't resolve, which is an accepted limitation.
+ * (BSD 2-Clause, §5) rather than written from memory. Only unnoted item
+ * ids are catalogued; noted stacks ({@code ItemID.Cert.*}) are a
+ * different id and won't resolve, which is an accepted limitation.
  */
 public final class FutureXpResolver
 {
-	/** Result of a successful lookup: which skill, and how much XP per item. */
-	public static final class FutureXp
-	{
-		public final Skill skill;
-		public final double xpPerItem;
-
-		FutureXp(Skill skill, double xpPerItem)
-		{
-			this.skill = skill;
-			this.xpPerItem = xpPerItem;
-		}
-	}
-
 	/** Gilded altar with both burners lit yields 350% of the bury value. */
 	private static final double GILDED_ALTAR_MULTIPLIER = 3.5;
 
-	private static final Map<Integer, Double> COOKING_XP = new HashMap<>();
-	private static final Map<Integer, Double> FIREMAKING_XP = new HashMap<>();
-	private static final Map<Integer, Double> BONE_BURY_XP = new HashMap<>();
+	private static final Map<Integer, List<ItemUse>> USES = new HashMap<>();
+
+	private static void cook(int itemId, double xp)
+	{
+		USES.put(itemId, Collections.singletonList(new ItemUse("COOK", "Cook", Skill.COOKING, xp)));
+	}
+
+	/** Logs that can only be burned (teak/mahogany etc. aren't fletchable into bows). */
+	private static void burnOnly(int itemId, double burnXp)
+	{
+		USES.put(itemId, Collections.singletonList(new ItemUse("BURN", "Burn", Skill.FIREMAKING, burnXp)));
+	}
+
+	private static void logWithBows(int itemId, double burnXp, double shortbowXp, double longbowXp)
+	{
+		USES.put(itemId, Arrays.asList(
+			new ItemUse("BURN", "Burn", Skill.FIREMAKING, burnXp),
+			new ItemUse("SHORTBOW", "Shortbow (u)", Skill.FLETCHING, shortbowXp),
+			new ItemUse("LONGBOW", "Longbow (u)", Skill.FLETCHING, longbowXp)));
+	}
+
+	private static void bones(int itemId, double buryXp)
+	{
+		USES.put(itemId, Arrays.asList(
+			new ItemUse("BURY", "Bury", Skill.PRAYER, buryXp),
+			new ItemUse("GILDED_ALTAR", "Gilded altar", Skill.PRAYER, buryXp * GILDED_ALTAR_MULTIPLIER)));
+	}
 
 	static
 	{
-		// Cooking - unambiguous, always on. Raw fish has exactly one use.
-		COOKING_XP.put(ItemID.RAW_SHRIMP, 30.0);
-		COOKING_XP.put(ItemID.RAW_ANCHOVIES, 30.0);
-		COOKING_XP.put(ItemID.RAW_SARDINE, 40.0);
-		COOKING_XP.put(ItemID.RAW_HERRING, 50.0);
-		COOKING_XP.put(ItemID.RAW_MACKEREL, 60.0);
-		COOKING_XP.put(ItemID.RAW_TROUT, 70.0);
-		COOKING_XP.put(ItemID.RAW_COD, 75.0);
-		COOKING_XP.put(ItemID.RAW_PIKE, 80.0);
-		COOKING_XP.put(ItemID.RAW_SALMON, 90.0);
-		COOKING_XP.put(ItemID.RAW_TUNA, 100.0);
-		COOKING_XP.put(ItemID.RAW_LOBSTER, 120.0);
-		COOKING_XP.put(ItemID.RAW_BASS, 130.0);
-		COOKING_XP.put(ItemID.RAW_SWORDFISH, 140.0);
-		COOKING_XP.put(ItemID.RAW_MONKFISH, 150.0);
-		COOKING_XP.put(ItemID.TBWT_RAW_KARAMBWAN, 190.0);
-		COOKING_XP.put(ItemID.RAW_SHARK, 210.0);
+		// Cooking - one legitimate use, so nothing to choose.
+		cook(ItemID.RAW_SHRIMP, 30.0);
+		cook(ItemID.RAW_ANCHOVIES, 30.0);
+		cook(ItemID.RAW_SARDINE, 40.0);
+		cook(ItemID.RAW_HERRING, 50.0);
+		cook(ItemID.RAW_MACKEREL, 60.0);
+		cook(ItemID.RAW_TROUT, 70.0);
+		cook(ItemID.RAW_COD, 75.0);
+		cook(ItemID.RAW_PIKE, 80.0);
+		cook(ItemID.RAW_SALMON, 90.0);
+		cook(ItemID.RAW_TUNA, 100.0);
+		cook(ItemID.RAW_LOBSTER, 120.0);
+		cook(ItemID.RAW_BASS, 130.0);
+		cook(ItemID.RAW_SWORDFISH, 140.0);
+		cook(ItemID.RAW_MONKFISH, 150.0);
+		cook(ItemID.TBWT_RAW_KARAMBWAN, 190.0);
+		cook(ItemID.RAW_SHARK, 210.0);
 
-		// Firemaking - only applies when the user has selected it for logs.
-		FIREMAKING_XP.put(ItemID.LOGS, 40.0);
-		FIREMAKING_XP.put(ItemID.ACHEY_TREE_LOGS, 40.0);
-		FIREMAKING_XP.put(ItemID.OAK_LOGS, 60.0);
-		FIREMAKING_XP.put(ItemID.WILLOW_LOGS, 90.0);
-		FIREMAKING_XP.put(ItemID.BLISTERWOOD_LOGS, 96.0);
-		FIREMAKING_XP.put(ItemID.TEAK_LOGS, 105.0);
-		FIREMAKING_XP.put(ItemID.JATOBA_LOGS, 120.0);
-		FIREMAKING_XP.put(ItemID.ARCTIC_PINE_LOG, 125.0);
-		FIREMAKING_XP.put(ItemID.MAPLE_LOGS, 135.0);
-		FIREMAKING_XP.put(ItemID.MAHOGANY_LOGS, 157.5);
-		FIREMAKING_XP.put(ItemID.CAMPHOR_LOGS, 180.0);
-		FIREMAKING_XP.put(ItemID.YEW_LOGS, 202.5);
-		FIREMAKING_XP.put(ItemID.IRONWOOD_LOGS, 220.5);
-		FIREMAKING_XP.put(ItemID.ROSEWOOD_LOGS, 268.0);
-		FIREMAKING_XP.put(ItemID.MAGIC_LOGS, 303.8);
-		FIREMAKING_XP.put(ItemID.REDWOOD_LOGS, 350.0);
+		// Logs - burn or fletch. Construction is deliberately absent: the
+		// XP comes from building furniture, not from the plank, so there's
+		// no honest per-log value to offer.
+		logWithBows(ItemID.LOGS, 40.0, 5.0, 10.0);
+		logWithBows(ItemID.OAK_LOGS, 60.0, 16.5, 25.0);
+		logWithBows(ItemID.WILLOW_LOGS, 90.0, 33.3, 41.5);
+		logWithBows(ItemID.MAPLE_LOGS, 135.0, 50.0, 58.3);
+		logWithBows(ItemID.YEW_LOGS, 202.5, 67.5, 75.0);
+		logWithBows(ItemID.MAGIC_LOGS, 303.8, 83.3, 91.5);
 
-		// Prayer - bury values; the gilded-altar option scales these.
-		BONE_BURY_XP.put(ItemID.BONES, 4.5);
-		BONE_BURY_XP.put(ItemID.WOLF_BONES, 4.5);
-		BONE_BURY_XP.put(ItemID.BAT_BONES, 5.3);
-		BONE_BURY_XP.put(ItemID.BIG_BONES, 15.0);
-		BONE_BURY_XP.put(ItemID.ZOGRE_BONES, 22.5);
-		BONE_BURY_XP.put(ItemID.BABYDRAGON_BONES, 30.0);
-		BONE_BURY_XP.put(ItemID.WYRM_BONES, 50.0);
-		BONE_BURY_XP.put(ItemID.DRAGON_BONES, 72.0);
-		BONE_BURY_XP.put(ItemID.WYVERN_BONES, 72.0);
-		BONE_BURY_XP.put(ItemID.DRAKE_BONES, 80.0);
-		BONE_BURY_XP.put(ItemID.LAVA_DRAGON_BONES, 85.0);
-		BONE_BURY_XP.put(ItemID.FROST_DRAGON_BONES, 100.0);
-		BONE_BURY_XP.put(ItemID.HYDRA_BONES, 110.0);
-		BONE_BURY_XP.put(ItemID.DAGANNOTH_KING_BONES, 125.0);
-		BONE_BURY_XP.put(ItemID.DRAGON_BONES_SUPERIOR, 150.0);
+		burnOnly(ItemID.ACHEY_TREE_LOGS, 40.0);
+		burnOnly(ItemID.BLISTERWOOD_LOGS, 96.0);
+		burnOnly(ItemID.TEAK_LOGS, 105.0);
+		burnOnly(ItemID.JATOBA_LOGS, 120.0);
+		burnOnly(ItemID.ARCTIC_PINE_LOG, 125.0);
+		burnOnly(ItemID.MAHOGANY_LOGS, 157.5);
+		burnOnly(ItemID.CAMPHOR_LOGS, 180.0);
+		burnOnly(ItemID.IRONWOOD_LOGS, 220.5);
+		burnOnly(ItemID.ROSEWOOD_LOGS, 268.0);
+		burnOnly(ItemID.REDWOOD_LOGS, 350.0);
+
+		// Prayer
+		bones(ItemID.BONES, 4.5);
+		bones(ItemID.WOLF_BONES, 4.5);
+		bones(ItemID.BAT_BONES, 5.3);
+		bones(ItemID.BIG_BONES, 15.0);
+		bones(ItemID.ZOGRE_BONES, 22.5);
+		bones(ItemID.BABYDRAGON_BONES, 30.0);
+		bones(ItemID.WYRM_BONES, 50.0);
+		bones(ItemID.DRAGON_BONES, 72.0);
+		bones(ItemID.WYVERN_BONES, 72.0);
+		bones(ItemID.DRAKE_BONES, 80.0);
+		bones(ItemID.LAVA_DRAGON_BONES, 85.0);
+		bones(ItemID.FROST_DRAGON_BONES, 100.0);
+		bones(ItemID.HYDRA_BONES, 110.0);
+		bones(ItemID.DAGANNOTH_KING_BONES, 125.0);
+		bones(ItemID.DRAGON_BONES_SUPERIOR, 150.0);
 	}
 
 	private FutureXpResolver()
@@ -115,39 +129,58 @@ public final class FutureXpResolver
 	}
 
 	/**
-	 * @return the future XP this item represents, or null when the item
-	 * isn't mapped or the user has switched its category off. Null is the
-	 * correct, common answer - §35's whole point is that undercovering
-	 * beats guessing.
+	 * @return the real (non-Off) products this item can become, or an empty
+	 * list when it isn't catalogued. Empty is a common and correct answer -
+	 * §35's whole point is that undercovering beats guessing.
 	 */
-	public static FutureXp resolve(int itemId, SkillingInfoConfig config)
+	public static List<ItemUse> getUses(int itemId)
 	{
-		Double cooking = COOKING_XP.get(itemId);
-		if (cooking != null)
-		{
-			return new FutureXp(Skill.COOKING, cooking);
-		}
+		return USES.getOrDefault(itemId, Collections.emptyList());
+	}
 
-		Double firemaking = FIREMAKING_XP.get(itemId);
-		if (firemaking != null && config.logsFutureXp() == SkillingInfoConfig.LogsUse.FIREMAKING)
+	/**
+	 * @return {@link #getUses} plus an explicit Off entry, for populating a
+	 * selector. Only meaningful when the item has a genuine choice to make.
+	 */
+	public static List<ItemUse> getSelectableUses(int itemId)
+	{
+		List<ItemUse> uses = getUses(itemId);
+		if (uses.isEmpty())
 		{
-			return new FutureXp(Skill.FIREMAKING, firemaking);
+			return Collections.emptyList();
 		}
+		List<ItemUse> selectable = new ArrayList<>(uses);
+		selectable.add(ItemUse.OFF);
+		return selectable;
+	}
 
-		Double bury = BONE_BURY_XP.get(itemId);
-		if (bury != null)
+	/** True when the player has a real decision to make about this item. */
+	public static boolean hasChoice(int itemId)
+	{
+		return getUses(itemId).size() > 1;
+	}
+
+	/** The use assumed when the player hasn't chosen one - the first listed. */
+	public static ItemUse getDefaultUse(int itemId)
+	{
+		List<ItemUse> uses = getUses(itemId);
+		return uses.isEmpty() ? null : uses.get(0);
+	}
+
+	/** Look up a use by its persisted id, or null if it no longer exists. */
+	public static ItemUse findUse(int itemId, String useId)
+	{
+		if (ItemUse.OFF.id.equals(useId))
 		{
-			switch (config.bonesFutureXp())
+			return ItemUse.OFF;
+		}
+		for (ItemUse use : getUses(itemId))
+		{
+			if (use.id.equals(useId))
 			{
-				case BURY:
-					return new FutureXp(Skill.PRAYER, bury);
-				case GILDED_ALTAR:
-					return new FutureXp(Skill.PRAYER, bury * GILDED_ALTAR_MULTIPLIER);
-				default:
-					return null;
+				return use;
 			}
 		}
-
 		return null;
 	}
 }
