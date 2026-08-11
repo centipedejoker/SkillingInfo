@@ -10,6 +10,7 @@ import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.awt.GridLayout;
 import java.util.Collection;
+import java.util.Map;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -17,7 +18,6 @@ import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingConstants;
-import net.runelite.client.game.ItemManager;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
 
@@ -35,7 +35,7 @@ class CurrentView extends JPanel
 	private static final int BUTTON_HEIGHT = 24;
 
 	private final SessionManager sessionManager;
-	private final ItemManager itemManager;
+	private final Map<Integer, String> itemNames;
 	private final Runnable onAction;
 
 	private final CardLayout cardLayout = new CardLayout();
@@ -55,10 +55,10 @@ class CurrentView extends JPanel
 	private final JButton pauseResumeButton = smallButton("Pause");
 	private final JPanel itemFlowPanel = new JPanel();
 
-	CurrentView(SessionManager sessionManager, ItemManager itemManager, Runnable onAction)
+	CurrentView(SessionManager sessionManager, Map<Integer, String> itemNames, Runnable onAction)
 	{
 		this.sessionManager = sessionManager;
-		this.itemManager = itemManager;
+		this.itemNames = itemNames;
 		this.onAction = onAction;
 
 		setLayout(new BorderLayout());
@@ -254,7 +254,7 @@ class CurrentView extends JPanel
 			{
 				continue;
 			}
-			String name = itemManager.getItemComposition(entry.getItemId()).getName();
+			String name = itemNames.getOrDefault(entry.getItemId(), "Item #" + entry.getItemId());
 
 			JLabel title = new JLabel(name);
 			title.setFont(FontManager.getRunescapeSmallFont());

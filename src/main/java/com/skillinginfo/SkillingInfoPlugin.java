@@ -1,6 +1,8 @@
 package com.skillinginfo;
 
 import com.google.inject.Provides;
+import com.skillinginfo.session.ActivitySession;
+import com.skillinginfo.session.ItemFlowEntry;
 import com.skillinginfo.session.SessionManager;
 import com.skillinginfo.session.SessionRepository;
 import com.skillinginfo.ui.SkillingInfoPanel;
@@ -9,6 +11,8 @@ import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import javax.inject.Inject;
 import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
@@ -52,6 +56,12 @@ public class SkillingInfoPlugin extends Plugin
 	@Inject
 	private ItemManager itemManager;
 
+	// Resolved on the client thread (see onGameTick) and read from the EDT
+	// by the panel - ItemManager.getItemComposition() asserts it's only
+	// ever called on the client thread, so the UI must never call it
+	// directly (caught live: SPEC.md v7 changelog).
+	private final Map<Integer, String> itemNames = new ConcurrentHashMap<>();
+
 	private SessionRepository sessionRepository;
 	private SessionManager sessionManager;
 	private SkillingInfoPanel panel;
@@ -71,7 +81,7 @@ public class SkillingInfoPlugin extends Plugin
 		sessionManager.init();
 
 		BufferedImage icon = buildIcon();
-		panel = new SkillingInfoPanel(sessionManager, skillIconManager, itemManager, icon);
+		panel = new SkillingInfoPanel(sessionManager, skillIconManager, itemNames, icon);
 		panel.refresh();
 
 		navButton = NavigationButton.builder()
@@ -102,7 +112,27 @@ public class SkillingInfoPlugin extends Plugin
 	public void onGameTick(GameTick event)
 	{
 		sessionManager.onGameTick(client.getTickCount());
+		resolveItemNames();
 		SwingUtilities.invokeLater(() -> panel.refresh());
+	}
+
+	/**
+	 * Runs on the client thread (this handler is invoked there, not the
+	 * EDT) so it's safe to call ItemManager here. Resolves and caches the
+	 * name of any item that has shown up in the current session's item
+	 * flow but hasn't been looked up yet.
+	 */
+	private void resolveItemNames()
+	{
+		ActivitySession session = sessionManager.getCurrentSession();
+		if (session == null)
+		{
+			return;
+		}
+		for (ItemFlowEntry entry : session.getItemFlow())
+		{
+			itemNames.computeIfAbsent(entry.getItemId(), id -> itemManager.getItemComposition(id).getName());
+		}
 	}
 
 	@Subscribe

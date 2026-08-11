@@ -8,13 +8,13 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.image.BufferedImage;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 import javax.swing.BorderFactory;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JPanel;
 import net.runelite.api.Skill;
-import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.SkillIconManager;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.PluginPanel;
@@ -48,7 +48,7 @@ public class SkillingInfoPanel extends PluginPanel
 	private Skill selectedSkill;
 	private Set<Skill> renderedSkills = new LinkedHashSet<>();
 
-	public SkillingInfoPanel(SessionManager sessionManager, SkillIconManager skillIconManager, ItemManager itemManager, BufferedImage pluginIcon)
+	public SkillingInfoPanel(SessionManager sessionManager, SkillIconManager skillIconManager, Map<Integer, String> itemNames, BufferedImage pluginIcon)
 	{
 		super(false);
 		this.sessionManager = sessionManager;
@@ -57,7 +57,7 @@ public class SkillingInfoPanel extends PluginPanel
 
 		setLayout(new BorderLayout());
 
-		currentView = new CurrentView(sessionManager, itemManager, this::refresh);
+		currentView = new CurrentView(sessionManager, itemNames, this::refresh);
 		historyView = new HistoryView();
 
 		cards.add(currentView, CURRENT_CARD);
