@@ -1,6 +1,7 @@
 package com.skillinginfo.ui;
 
 import com.skillinginfo.session.ActivitySession;
+import com.skillinginfo.session.ItemFlowEntry;
 import com.skillinginfo.session.PromptSummary;
 import com.skillinginfo.session.SessionManager;
 import com.skillinginfo.session.SessionState;
@@ -8,6 +9,7 @@ import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.awt.GridLayout;
+import java.util.Collection;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -15,6 +17,7 @@ import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingConstants;
+import net.runelite.client.game.ItemManager;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
 
@@ -32,6 +35,7 @@ class CurrentView extends JPanel
 	private static final int BUTTON_HEIGHT = 24;
 
 	private final SessionManager sessionManager;
+	private final ItemManager itemManager;
 	private final Runnable onAction;
 
 	private final CardLayout cardLayout = new CardLayout();
@@ -49,10 +53,12 @@ class CurrentView extends JPanel
 	private final JLabel activeRateValue = new JLabel();
 	private final JLabel overallRateValue = new JLabel();
 	private final JButton pauseResumeButton = smallButton("Pause");
+	private final JPanel itemFlowPanel = new JPanel();
 
-	CurrentView(SessionManager sessionManager, Runnable onAction)
+	CurrentView(SessionManager sessionManager, ItemManager itemManager, Runnable onAction)
 	{
 		this.sessionManager = sessionManager;
+		this.itemManager = itemManager;
 		this.onAction = onAction;
 
 		setLayout(new BorderLayout());
@@ -136,6 +142,9 @@ class CurrentView extends JPanel
 		addStatRow(stats, "Active XP/hr", activeRateValue);
 		addStatRow(stats, "Overall XP/hr", overallRateValue);
 
+		itemFlowPanel.setLayout(new BoxLayout(itemFlowPanel, BoxLayout.Y_AXIS));
+		itemFlowPanel.setBorder(BorderFactory.createEmptyBorder(4, 0, 8, 0));
+
 		pauseResumeButton.addActionListener(e -> {
 			if (sessionManager.getState() == SessionState.ACTIVE)
 			{
@@ -161,6 +170,7 @@ class CurrentView extends JPanel
 		panel.add(skillLabel);
 		panel.add(activityLabel);
 		panel.add(stats);
+		panel.add(itemFlowPanel);
 		panel.add(Box.createVerticalGlue());
 		panel.add(buttons);
 		return panel;
@@ -219,6 +229,8 @@ class CurrentView extends JPanel
 				overallRateValue.setText(formatRate(xp, total));
 				pauseResumeButton.setText(state == SessionState.ACTIVE ? "Pause" : "Resume");
 
+				refreshItemFlow(session.getItemFlow());
+
 				cardLayout.show(cards, SESSION_CARD);
 				break;
 			}
@@ -226,6 +238,41 @@ class CurrentView extends JPanel
 				cardLayout.show(cards, IDLE_CARD);
 				break;
 		}
+	}
+
+	/**
+	 * SPEC.md §11/§29 OUTPUT section - one compact row per item generated
+	 * this session. Phase 2 only has generated/dropped/net retained;
+	 * banked/future XP light up in later phases.
+	 */
+	private void refreshItemFlow(Collection<ItemFlowEntry> entries)
+	{
+		itemFlowPanel.removeAll();
+		for (ItemFlowEntry entry : entries)
+		{
+			if (entry.getGenerated() <= 0)
+			{
+				continue;
+			}
+			String name = itemManager.getItemComposition(entry.getItemId()).getName();
+
+			JLabel title = new JLabel(name);
+			title.setFont(FontManager.getRunescapeSmallFont());
+
+			JLabel detail = new JLabel(String.format("Gen %,d  ·  Dropped %,d  ·  Net %,d",
+				entry.getGenerated(), entry.getDropped(), entry.getNetRetained()));
+			detail.setFont(FontManager.getRunescapeSmallFont());
+			detail.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+
+			JPanel row = new JPanel();
+			row.setLayout(new BoxLayout(row, BoxLayout.Y_AXIS));
+			row.setBorder(BorderFactory.createEmptyBorder(2, 0, 2, 0));
+			row.add(title);
+			row.add(detail);
+			itemFlowPanel.add(row);
+		}
+		itemFlowPanel.revalidate();
+		itemFlowPanel.repaint();
 	}
 
 	private static String formatDuration(long totalSeconds)

@@ -2,7 +2,9 @@ package com.skillinginfo.session;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -12,9 +14,10 @@ import net.runelite.api.Skill;
 
 /**
  * The single ActivitySession model shared by live UI, history and
- * persistence (SPEC.md §51). Phase 1 only populates the performance fields
- * (§61); activity classification defaults to "Unclassified" (§15/§16) and
- * item-flow fields are added in Phase 2+.
+ * persistence (SPEC.md §51). Phase 1 populated the performance fields
+ * (§61); item-flow (§17/§18) is added in Phase 2, starting with
+ * generated/directly-acquired/dropped - pickedUp/repicked/banked/consumed
+ * light up as their correlators (§20a, §25a) come online in later phases.
  * <p>
  * {@code skill} is a *tracking-group key* (SPEC.md §7a), not necessarily the
  * literal skill that triggered detection: for a skilling session it's the
@@ -59,6 +62,31 @@ public class ActivitySession
 	private final List<Instant> tripBoundaries = new ArrayList<>();
 
 	private final Map<Skill, Integer> xpGained = new EnumMap<>(Skill.class);
+
+	private final Map<Integer, ItemFlowEntry> itemFlow = new LinkedHashMap<>();
+
+	public void addGenerated(int itemId, int qty)
+	{
+		if (qty <= 0)
+		{
+			return;
+		}
+		itemFlow.computeIfAbsent(itemId, ItemFlowEntry::new).addGenerated(qty);
+	}
+
+	public void addDropped(int itemId, int qty)
+	{
+		if (qty <= 0)
+		{
+			return;
+		}
+		itemFlow.computeIfAbsent(itemId, ItemFlowEntry::new).addDropped(qty);
+	}
+
+	public Collection<ItemFlowEntry> getItemFlow()
+	{
+		return itemFlow.values();
+	}
 
 	/** SPEC.md §1a/§7a: combat sessions are always the SLAYER group key. */
 	public String getCategory()

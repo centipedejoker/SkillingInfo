@@ -16,9 +16,13 @@ import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.events.ItemContainerChanged;
+import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.api.events.StatChanged;
+import net.runelite.api.gameval.InventoryID;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.SkillIconManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -45,6 +49,9 @@ public class SkillingInfoPlugin extends Plugin
 	@Inject
 	private SkillIconManager skillIconManager;
 
+	@Inject
+	private ItemManager itemManager;
+
 	private SessionRepository sessionRepository;
 	private SessionManager sessionManager;
 	private SkillingInfoPanel panel;
@@ -64,7 +71,7 @@ public class SkillingInfoPlugin extends Plugin
 		sessionManager.init();
 
 		BufferedImage icon = buildIcon();
-		panel = new SkillingInfoPanel(sessionManager, skillIconManager, icon);
+		panel = new SkillingInfoPanel(sessionManager, skillIconManager, itemManager, icon);
 		panel.refresh();
 
 		navButton = NavigationButton.builder()
@@ -96,6 +103,24 @@ public class SkillingInfoPlugin extends Plugin
 	{
 		sessionManager.onGameTick(client.getTickCount());
 		SwingUtilities.invokeLater(() -> panel.refresh());
+	}
+
+	@Subscribe
+	public void onItemContainerChanged(ItemContainerChanged event)
+	{
+		if (event.getContainerId() == InventoryID.INV)
+		{
+			sessionManager.onInventoryChanged(event.getItemContainer().getItems());
+		}
+	}
+
+	@Subscribe
+	public void onMenuOptionClicked(MenuOptionClicked event)
+	{
+		if ("Drop".equals(event.getMenuOption()))
+		{
+			sessionManager.onDropClicked(event.getItemId());
+		}
 	}
 
 	@Subscribe

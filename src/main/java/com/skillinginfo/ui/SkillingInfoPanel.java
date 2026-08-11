@@ -14,6 +14,7 @@ import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JPanel;
 import net.runelite.api.Skill;
+import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.SkillIconManager;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.PluginPanel;
@@ -47,7 +48,7 @@ public class SkillingInfoPanel extends PluginPanel
 	private Skill selectedSkill;
 	private Set<Skill> renderedSkills = new LinkedHashSet<>();
 
-	public SkillingInfoPanel(SessionManager sessionManager, SkillIconManager skillIconManager, BufferedImage pluginIcon)
+	public SkillingInfoPanel(SessionManager sessionManager, SkillIconManager skillIconManager, ItemManager itemManager, BufferedImage pluginIcon)
 	{
 		super(false);
 		this.sessionManager = sessionManager;
@@ -56,7 +57,7 @@ public class SkillingInfoPanel extends PluginPanel
 
 		setLayout(new BorderLayout());
 
-		currentView = new CurrentView(sessionManager, this::refresh);
+		currentView = new CurrentView(sessionManager, itemManager, this::refresh);
 		historyView = new HistoryView();
 
 		cards.add(currentView, CURRENT_CARD);

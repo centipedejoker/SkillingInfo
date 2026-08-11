@@ -2,7 +2,7 @@
 
 RuneLite Personal Activity, Item-Flow & Account-Gain Analytics
 
-**Document status:** v6 — Reviewed, hardened, prior-art-checked, scope-decided, deployment-ready & first-playtested implementation specification (2026-08-11)
+**Document status:** v7 — Reviewed, hardened, prior-art-checked, scope-decided, deployment-ready, first-playtested & Phase-2-implemented specification (2026-08-11)
 **Target:** RuneLite Plugin Hub
 **Primary goal:** Measure how the player actually performs OSRS activities and what their account actually gains from each session
 **Secondary goal:** Produce structured local historical data for external analysis
@@ -20,8 +20,8 @@ RuneLite Personal Activity, Item-Flow & Account-Gain Analytics
 > **Changelog from v4:** New §65 (UI/UX Lock-Down) and §66 (Deployment Artifacts), verified directly against RuneLite's plugin submission docs rather than assumed. `LICENSE` (BSD 2-Clause) and `runelite-plugin.properties`'s missing `build`/`version` fields added to the scaffold; two still-open gaps (a real repo-root `icon.png` and finalized visual mockups) are called out explicitly rather than left implicit.
 >
 > **Changelog from v5:** First live playtest — the scaffold actually built and ran (Gradle wrapper generated, JDK/module fixes applied, `startUp()` confirmed clean with zero exceptions), surfacing the first real UX feedback rather than a hypothetical one. The plain Current/History text-tab switch is replaced with a skill-icon toggle row (§65), built on RuneLite core's own `SkillIconManager` and the small-font convention (`FontManager.getRunescapeSmallFont()`) taken directly from XP Tracker's source — both verified against runelite/runelite, not assumed. §61's Phase 1 checklist item for the sidebar is now implemented against real feedback instead of the original ASCII mockup guess.
-
----
+>
+> **Changelog from v6:** Phase 1 fully validated live (candidate detection, Pause/Resume, Stop→History, Ignore, restart persistence, config-driven threshold tuning — all confirmed working). Phase 2 (§61) implemented: `ItemFlowEntry`, `InventoryDeltaTracker`, `DropCorrelator`, wired into `SessionManager` and `ActivitySession`, with a live OUTPUT section in the sidebar. One real bug caught and fixed before it shipped: `InventoryDeltaTracker.reset()` was clearing its diffing baseline, not just pending deltas, which would have made a player's entire inventory look newly "generated" on the first inventory change after every session start. `net.runelite.api.InventoryID` confirmed deprecated in favour of `net.runelite.api.gameval.InventoryID` — used the latter throughout.
 
 ## 1. PRODUCT DEFINITION
 
@@ -1045,7 +1045,14 @@ Recommended: "Tracks personal skilling sessions, XP rates, idle time, activity o
 
 **Phase 1** — plugin shell; Bossing Info-style sidebar; candidate XP detection; Start/Ignore; XP; active/idle/overall time; Pause/Resume/Stop; history. Include `tripBoundaries` field in the session schema even though unused (§39).
 
-**Phase 2** — direct skilling output; inventory delta engine; confirmed drops; retained output. Use Fishing or Woodcutting as validation.
+**Phase 2** ✅ — direct skilling output; inventory delta engine; confirmed drops; retained output.
+
+`[v7]` Implementation notes and simplifications:
+- **Direct acquisition** uses a same-tick heuristic, not activity classification: any inventory increase landing in the same game tick as XP credited to the session is attributed as generated/directly-acquired (§16's "conservative deterministic signals" — no per-activity knowledge required). This only fires for gathering skills, where the resource lands straight in inventory; combat/Slayer generation is ground-based and comes online in Phase 3 (pickup) and Phase 6 (loot flow) as originally planned.
+- **Confirmed drops** use §21's pending-ledger pattern, but simplified: correlates the Drop menu click against the resulting inventory decrease only. The ground-side half of §21's full model (confirming the item actually appears on the ground) is added once `GroundItemTracker` exists in Phase 3 — until then, a drop is "confirmed" on inventory evidence alone.
+- **Net retained** is `generated − dropped` for now — §28's full formula (± repickup, − consumed, banked-confirmed override) has no inputs to subtract/add yet since those correlators don't exist until Phases 3–4.
+- **No retroactive item-flow buffering.** §6/§10 allow "buffered output events where safe" from the candidate window, but Phase 2 only tracks item flow from the moment a session formally starts — buffering items in parallel with the XP candidate buffer is deferred as unnecessary complexity for now.
+- Not yet done: the reconciliation invariant (§52) and unclassified-movement handling (§50 [v4]) have nothing to validate against until Phase 3/4 add pickup and bank correlation — Phase 2's `OTHER_INVENTORY_GAIN`/`OTHER_INVENTORY_LOSS` paths are effectively unreachable until then, which is expected, not a gap.
 
 **Phase 3** — ground-item tracker; confirmed pickup correlation (§20a); repickup handling.
 

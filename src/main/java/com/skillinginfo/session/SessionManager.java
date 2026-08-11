@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import lombok.Getter;
+import net.runelite.api.Item;
 import net.runelite.api.Skill;
 
 /**
@@ -31,6 +32,8 @@ public class SessionManager
 	private final SessionRepository repository;
 	private final XpTracker xpTracker = new XpTracker();
 	private final SessionClock clock = new SessionClock();
+	private final InventoryDeltaTracker inventoryDeltaTracker = new InventoryDeltaTracker();
+	private final DropCorrelator dropCorrelator = new DropCorrelator();
 
 	private final Map<Skill, CandidateBuffer> buffers = new EnumMap<>(Skill.class);
 	private final Map<Skill, Integer> pendingTickDeltas = new EnumMap<>(Skill.class);
@@ -54,6 +57,7 @@ public class SessionManager
 	private int promptExpiresAtTick;
 	private int lastQualifyingTick;
 	private int currentTick;
+	private boolean xpCreditedThisTick;
 
 	public SessionManager(SkillingInfoConfig config, SessionRepository repository)
 	{
@@ -87,6 +91,29 @@ public class SessionManager
 	}
 
 	/**
+	 * SPEC.md §48: feeds the current inventory snapshot into the delta
+	 * engine every time it changes. Diffing happens immediately; the
+	 * resulting deltas are picked up on the next {@link #onGameTick}.
+	 */
+	public void onInventoryChanged(Item[] items)
+	{
+		inventoryDeltaTracker.onInventoryChanged(items);
+	}
+
+	/**
+	 * SPEC.md §21: records a Drop menu click as a pending correlation.
+	 * No-op unless a session is actually running - a click with nothing to
+	 * attribute it to isn't useful data.
+	 */
+	public void onDropClicked(int itemId)
+	{
+		if (state == SessionState.ACTIVE || state == SessionState.PAUSED)
+		{
+			dropCorrelator.onDropClicked(itemId, currentTick);
+		}
+	}
+
+	/**
 	 * Item-flow correlators (Phase 2+: pickup/drop/bank) call this so a long
 	 * loot-banking trip with no XP in the idle window doesn't incorrectly
 	 * auto-pause a session that's still actively in progress (SPEC.md §13
@@ -109,6 +136,7 @@ public class SessionManager
 	public void onGameTick(int tick)
 	{
 		this.currentTick = tick;
+		xpCreditedThisTick = false;
 
 		// SPEC.md §9 [v4]: more than one *group key* (§7a) changing in the
 		// same tick is the reward-burst signal, not more than one raw skill
@@ -134,6 +162,8 @@ public class SessionManager
 			}
 		}
 		pendingTickDeltas.clear();
+
+		creditItemFlow();
 
 		switch (state)
 		{
@@ -181,6 +211,45 @@ public class SessionManager
 		{
 			currentSession.addXp(skill, delta);
 			lastQualifyingTick = currentTick;
+			xpCreditedThisTick = true;
+		}
+	}
+
+	/**
+	 * SPEC.md §16: correlates this tick's inventory deltas against the
+	 * current session. Generation is attributed only on a tick that also
+	 * credited qualifying XP to the session - inventory gained/dropped
+	 * outside that (e.g. picking something off the ground) isn't
+	 * "generated" in Phase 2's sense; ground pickup gets its own
+	 * correlator in Phase 3.
+	 */
+	private void creditItemFlow()
+	{
+		Map<Integer, Integer> increased = inventoryDeltaTracker.consumeIncreased();
+		Map<Integer, Integer> decreased = inventoryDeltaTracker.consumeDecreased();
+
+		if ((state != SessionState.ACTIVE && state != SessionState.PAUSED) || currentSession == null)
+		{
+			return;
+		}
+
+		if (xpCreditedThisTick)
+		{
+			for (Map.Entry<Integer, Integer> entry : increased.entrySet())
+			{
+				currentSession.addGenerated(entry.getKey(), entry.getValue());
+			}
+		}
+
+		Map<Integer, Integer> confirmedDrops = dropCorrelator.resolve(currentTick, decreased);
+		for (Map.Entry<Integer, Integer> entry : confirmedDrops.entrySet())
+		{
+			currentSession.addDropped(entry.getKey(), entry.getValue());
+		}
+		if (!confirmedDrops.isEmpty())
+		{
+			// SPEC.md §13 [v4]: a drop is deliberate activity, not idle time
+			recordNonXpActivity();
 		}
 	}
 
@@ -192,6 +261,7 @@ public class SessionManager
 		{
 			currentSession.addXp(skill, delta);
 			lastQualifyingTick = currentTick;
+			xpCreditedThisTick = true;
 			return;
 		}
 
@@ -199,6 +269,7 @@ public class SessionManager
 		{
 			currentSession.addXp(skill, delta);
 			lastQualifyingTick = currentTick;
+			xpCreditedThisTick = true;
 			state = SessionState.ACTIVE; // [v2] resume threshold = 1 event, distinct from start threshold
 			return;
 		}
@@ -342,6 +413,8 @@ public class SessionManager
 
 		currentSession = session;
 		clock.reset();
+		inventoryDeltaTracker.reset();
+		dropCorrelator.reset();
 		lastQualifyingTick = currentTick;
 
 		buffers.remove(candidateGroupKey);
@@ -400,6 +473,8 @@ public class SessionManager
 
 		currentSession = null;
 		clock.reset();
+		inventoryDeltaTracker.reset();
+		dropCorrelator.reset();
 		state = SessionState.IDLE;
 	}
 }
