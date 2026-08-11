@@ -263,7 +263,7 @@ class CurrentView extends JPanel
 			}
 			String name = itemNames.getOrDefault(entry.getItemId(), "Item #" + entry.getItemId());
 
-			JLabel line = new JLabel(String.format("%s  +%,d", name, entry.getNetRetained()));
+			JLabel line = new JLabel(ItemFlowFormat.line(name, entry));
 			line.setFont(FontManager.getRunescapeSmallFont());
 			itemFlowPanel.add(line);
 		}

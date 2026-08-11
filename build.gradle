@@ -35,13 +35,10 @@ tasks.withType(JavaCompile).configureEach {
 	options.release.set(11)
 }
 
-test {
-	// src/test only holds SkillingInfoPluginTest, a manual-run launcher
-	// (SPEC.md §67 / README "Running locally"), not JUnit tests - real
-	// unit tests land here per §53-57 starting Phase 2. Until then, zero
-	// discovered tests is expected, not a build failure.
-	failOnNoDiscoveredTests = false
-}
+// NOTE: src/test also holds SkillingInfoPluginTest, which is a manual-run
+// launcher (SPEC.md §67 / README "Running locally"), not a JUnit test.
+// Real unit tests now live alongside it (BankCorrelatorTest, §55), so the
+// default "fail if no tests were discovered" guard is left enabled.
 
 // ./gradlew run - launches the full RuneLite client with Skilling Info
 // pre-loaded (SkillingInfoPluginTest), for local testing against a real

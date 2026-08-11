@@ -101,11 +101,27 @@ public class ActivitySession
 		itemFlow.computeIfAbsent(itemId, ItemFlowEntry::new).addRepicked(qty);
 	}
 
+	public void addBanked(int itemId, int qty)
+	{
+		if (qty <= 0)
+		{
+			return;
+		}
+		itemFlow.computeIfAbsent(itemId, ItemFlowEntry::new).addBanked(qty);
+	}
+
 	/** SPEC.md §22: how much of this item is still "dropped but not yet repicked" - the repickup offset. */
 	public int getOutstandingDropped(int itemId)
 	{
 		ItemFlowEntry entry = itemFlow.get(itemId);
 		return entry == null ? 0 : Math.max(0, entry.getDropped() - entry.getRepicked());
+	}
+
+	/** SPEC.md §25a step 1: acquired this session and still held unbanked - the bank correlation ledger. */
+	public int getOutstandingForBanking(int itemId)
+	{
+		ItemFlowEntry entry = itemFlow.get(itemId);
+		return entry == null ? 0 : entry.getOutstandingForBanking();
 	}
 
 	public Collection<ItemFlowEntry> getItemFlow()

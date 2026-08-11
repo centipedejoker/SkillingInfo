@@ -1073,7 +1073,15 @@ Recommended: "Tracks personal skilling sessions, XP rates, idle time, activity o
 
 `[v7]` **UI simplified to net-only, one line per item** (§65), in both `CurrentView` and `HistoryView`: nobody needs the generated/dropped breakdown at a glance, only what they ended up with, and the multi-stat two-line version was overflowing the sidebar's width. Full breakdown remains backlog for the expandable detail view already logged in §65.
 
-**Phase 4** — bank correlation (§25a); confirmed banked output; banked/future XP.
+**Phase 4** 🔨 — bank correlation (§25a) and confirmed banked output implemented; banked/future XP (§33's item→XP table) still to do.
+
+`[v7]` Implementation notes:
+- **`BankCorrelator` owns the single bank snapshot** (§26) and implements §25a's three-way minimum verbatim: `min(bankDelta, invDelta, sessionOutstanding)`. Because it's the spec's most safety-critical mechanism and is pure logic, it's covered by real unit tests (`BankCorrelatorTest`, 9 cases drawn from §55's list) rather than live play-testing alone — including §27's worked example, withdraw-then-redeposit inertness, Deposit-All independence, and the first-open baseline case.
+- **First bank observation establishes the baseline silently.** Without this the player's entire existing bank reads as one enormous deposit the moment they first open it. The three-way min would independently reject that too (no matching inventory decrease), but relying on a second-order safeguard for a first-order mistake is precisely how the earlier `InventoryDeltaTracker.reset()` bug happened, so it's handled explicitly.
+- **Ordering:** drops resolve before bank deposits and are subtracted from the shared inventory-decrease pool, so one decrease can't read as both. Same priority pattern as pickups-before-generation — click-gated (more specific) signals win.
+- **Unresolved bank deltas are discarded, not carried forward** (§25a step 5) — an unattributable deposit stays unattributed rather than giving a later tick a chance to misattribute it.
+- **`getOutstandingForBanking()` = netRetained − banked**, i.e. acquired this session and still in inventory. Banking deliberately does *not* reduce net retained (§33: a banked item is the *strongest* account-gain state, not a loss).
+- Deferred: `tripBoundaries` population on bank-open (§39) still isn't wired — it needs reliable bank-open detection rather than inferring from container changes, and it stays Phase 6 scope.
 
 **Phase 5** — activity modules.
 

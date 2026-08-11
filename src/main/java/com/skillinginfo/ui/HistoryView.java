@@ -113,7 +113,7 @@ class HistoryView extends JPanel
 				continue;
 			}
 			String name = itemNames.getOrDefault(entry.getItemId(), "Item #" + entry.getItemId());
-			JLabel itemLine = new JLabel(String.format("%s  +%,d", name, entry.getNetRetained()));
+			JLabel itemLine = new JLabel(ItemFlowFormat.line(name, entry));
 			itemLine.setFont(FontManager.getRunescapeSmallFont());
 			itemLine.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 			row.add(itemLine);

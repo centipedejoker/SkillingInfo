@@ -41,6 +41,7 @@ public class SessionManager
 	private final DropCorrelator dropCorrelator = new DropCorrelator();
 	private final GroundItemTracker groundItemTracker = new GroundItemTracker();
 	private final PickupCorrelator pickupCorrelator = new PickupCorrelator();
+	private final BankCorrelator bankCorrelator = new BankCorrelator();
 
 	private final Map<Skill, CandidateBuffer> buffers = new EnumMap<>(Skill.class);
 	private final Map<Skill, Integer> pendingTickDeltas = new EnumMap<>(Skill.class);
@@ -120,6 +121,17 @@ public class SessionManager
 	public void onInventoryChanged(Item[] items)
 	{
 		inventoryDeltaTracker.onInventoryChanged(items);
+	}
+
+	/**
+	 * SPEC.md §25a step 2: feeds the bank container into the correlator on
+	 * every change while the bank is open, not just at close - per-tick
+	 * diffing is what makes "Deposit All", partial deposits and
+	 * withdraw-then-redeposit sequences within one visit resolve correctly.
+	 */
+	public void onBankChanged(Item[] items)
+	{
+		bankCorrelator.onBankChanged(items);
 	}
 
 	/**
@@ -330,11 +342,30 @@ public class SessionManager
 		Map<Integer, Integer> confirmedDrops = dropCorrelator.resolve(currentTick, decreased);
 		for (Map.Entry<Integer, Integer> entry : confirmedDrops.entrySet())
 		{
+			// drops are click-gated and therefore more specific than the
+			// bank signature below - claim them out of the decrease pool
+			// first so one inventory decrease can't read as both
+			decreased.merge(entry.getKey(), -entry.getValue(), Integer::sum);
 			currentSession.addDropped(entry.getKey(), entry.getValue());
 		}
 		if (!confirmedDrops.isEmpty())
 		{
 			// SPEC.md §13 [v4]: a drop is deliberate activity, not idle time
+			recordNonXpActivity();
+		}
+
+		Map<Integer, Integer> confirmedBanked = bankCorrelator.resolve(decreased,
+			itemId -> currentSession.getOutstandingForBanking(itemId));
+		for (Map.Entry<Integer, Integer> entry : confirmedBanked.entrySet())
+		{
+			log.debug("Crediting banked: itemId={} qty={}", entry.getKey(), entry.getValue());
+			currentSession.addBanked(entry.getKey(), entry.getValue());
+		}
+		if (!confirmedBanked.isEmpty())
+		{
+			// SPEC.md §13 [v4]: banking is deliberate activity, not idle time -
+			// this is the scenario that motivated broadening the idle signal
+			// beyond XP in the first place
 			recordNonXpActivity();
 		}
 	}
@@ -538,6 +569,7 @@ public class SessionManager
 		inventoryDeltaTracker.reset();
 		dropCorrelator.reset();
 		pickupCorrelator.reset();
+		bankCorrelator.reset();
 		lastQualifyingTick = currentTick;
 		lastXpCreditTick = currentTick;
 
@@ -601,6 +633,7 @@ public class SessionManager
 		inventoryDeltaTracker.reset();
 		dropCorrelator.reset();
 		pickupCorrelator.reset();
+		bankCorrelator.reset();
 		state = SessionState.IDLE;
 	}
 }

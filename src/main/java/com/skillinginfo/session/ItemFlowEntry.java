@@ -9,8 +9,9 @@ import lombok.Getter;
  * `generated` stays purely informational (what the activity itself
  * produced, whether picked up or not). Net retained is driven off
  * `directlyAcquired`, not `generated`, so a ground pickup with no
- * matching same-tick XP still counts correctly. banked/consumed light
- * up in Phase 4 as its correlator (§25a) comes online.
+ * matching same-tick XP still counts correctly. `consumed` lights up
+ * once §18's ITEM_CONSUMED path exists; `banked` is populated by Phase
+ * 4's bank correlator (§25a).
  */
 @Getter
 public class ItemFlowEntry
@@ -58,14 +59,31 @@ public class ItemFlowEntry
 		repicked += qty;
 	}
 
+	/** SPEC.md §25a: confirmed moved from inventory into the bank this session. */
+	void addBanked(int qty)
+	{
+		banked += qty;
+	}
+
 	/**
 	 * SPEC.md §28: net retained = acquired - discards - consumption ±
-	 * repickup, with confirmed banked preferred once available. banked/
-	 * consumed are always zero until Phase 4's bank correlator exists, so
-	 * this currently reduces to directlyAcquired - dropped + repicked.
+	 * repickup. Banking deliberately does NOT reduce this - a banked item
+	 * is still retained, and per §33 it's the *strongest* form of account
+	 * gain, not a loss. `consumed` stays zero until §18's ITEM_CONSUMED
+	 * path exists.
 	 */
 	public int getNetRetained()
 	{
 		return Math.max(0, directlyAcquired - dropped + repicked - consumed);
+	}
+
+	/**
+	 * SPEC.md §25a step 1 - the "acquired this session, not yet resolved"
+	 * ledger the three-way minimum caps against: what the session brought
+	 * in and still holds in inventory, i.e. not yet banked.
+	 */
+	public int getOutstandingForBanking()
+	{
+		return Math.max(0, getNetRetained() - banked);
 	}
 }
