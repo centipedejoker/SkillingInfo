@@ -1,5 +1,6 @@
 package com.skillinginfo.session;
 
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
 import net.runelite.api.Skill;
@@ -26,11 +27,26 @@ public final class ActivityClassifier
 {
 	public static final String UNCLASSIFIED = "Unclassified";
 
-	private static final Map<Integer, String> WOODCUTTING = new HashMap<>();
-	private static final Map<Integer, String> FISHING = new HashMap<>();
+	/**
+	 * skill → (produced itemId → activity name). Adding a skill is purely
+	 * a data entry here; no new mechanism is involved.
+	 */
+	private static final Map<Skill, Map<Integer, String>> TABLES = new EnumMap<>(Skill.class);
+	private static final Map<Skill, String> OUTPUT_NOUNS = new EnumMap<>(Skill.class);
+
+	private static Map<Integer, String> table(Skill skill, String outputNoun)
+	{
+		OUTPUT_NOUNS.put(skill, outputNoun);
+		return TABLES.computeIfAbsent(skill, s -> new HashMap<>());
+	}
 
 	static
 	{
+		Map<Integer, String> WOODCUTTING = table(Skill.WOODCUTTING, "Logs");
+		Map<Integer, String> FISHING = table(Skill.FISHING, "Catches");
+		Map<Integer, String> MINING = table(Skill.MINING, "Ores");
+		Map<Integer, String> HUNTER = table(Skill.HUNTER, "Catches");
+		Map<Integer, String> FARMING = table(Skill.FARMING, "Harvested");
 		WOODCUTTING.put(ItemID.LOGS, "Regular trees");
 		WOODCUTTING.put(ItemID.ACHEY_TREE_LOGS, "Achey trees");
 		WOODCUTTING.put(ItemID.OAK_LOGS, "Oak trees");
@@ -67,6 +83,48 @@ public final class ActivityClassifier
 		FISHING.put(ItemID.RAW_MONKFISH, "Monkfish");
 		FISHING.put(ItemID.RAW_SHARK, "Sharks");
 		FISHING.put(ItemID.TBWT_RAW_KARAMBWAN, "Karambwans");
+
+		MINING.put(ItemID.COPPER_ORE, "Copper");
+		MINING.put(ItemID.TIN_ORE, "Tin");
+		MINING.put(ItemID.CLAY, "Clay");
+		MINING.put(ItemID.IRON_ORE, "Iron ore");
+		MINING.put(ItemID.SILVER_ORE, "Silver ore");
+		MINING.put(ItemID.COAL, "Coal");
+		MINING.put(ItemID.GOLD_ORE, "Gold ore");
+		MINING.put(ItemID.MITHRIL_ORE, "Mithril ore");
+		MINING.put(ItemID.ADAMANTITE_ORE, "Adamantite ore");
+		MINING.put(ItemID.RUNITE_ORE, "Runite ore");
+		MINING.put(ItemID.BLURITE_ORE, "Blurite ore");
+		MINING.put(ItemID.LOVAKITE_ORE, "Lovakite ore");
+		MINING.put(ItemID.AMETHYST, "Amethyst");
+		MINING.put(ItemID.BLANKRUNE, "Essence");
+		MINING.put(ItemID.BLANKRUNE_HIGH, "Essence");
+
+		HUNTER.put(ItemID.CHINCHOMPA_CAPTURED, "Chinchompas");
+		HUNTER.put(ItemID.CHINCHOMPA_BIG_CAPTURED, "Red chinchompas");
+		HUNTER.put(ItemID.CHINCHOMPA_BLACK, "Black chinchompas");
+		HUNTER.put(ItemID.ORANGE_SALAMANDER, "Orange salamanders");
+		HUNTER.put(ItemID.RED_SALAMANDER, "Red salamanders");
+		HUNTER.put(ItemID.BLACK_SALAMANDER, "Black salamanders");
+
+		// Farming is named by what's harvested. Seeds are consumed at
+		// planting, typically long before the session that harvests them,
+		// so the ledger stays one-sided in a way that's actually correct.
+		FARMING.put(ItemID.UNIDENTIFIED_GUAM, "Guam");
+		FARMING.put(ItemID.UNIDENTIFIED_MARENTILL, "Marrentill");
+		FARMING.put(ItemID.UNIDENTIFIED_TARROMIN, "Tarromin");
+		FARMING.put(ItemID.UNIDENTIFIED_HARRALANDER, "Harralander");
+		FARMING.put(ItemID.UNIDENTIFIED_RANARR, "Ranarr");
+		FARMING.put(ItemID.UNIDENTIFIED_TOADFLAX, "Toadflax");
+		FARMING.put(ItemID.UNIDENTIFIED_IRIT, "Irit");
+		FARMING.put(ItemID.UNIDENTIFIED_AVANTOE, "Avantoe");
+		FARMING.put(ItemID.UNIDENTIFIED_KWUARM, "Kwuarm");
+		FARMING.put(ItemID.UNIDENTIFIED_SNAPDRAGON, "Snapdragon");
+		FARMING.put(ItemID.UNIDENTIFIED_CADANTINE, "Cadantine");
+		FARMING.put(ItemID.UNIDENTIFIED_LANTADYME, "Lantadyme");
+		FARMING.put(ItemID.UNIDENTIFIED_DWARF_WEED, "Dwarf weed");
+		FARMING.put(ItemID.UNIDENTIFIED_TORSTOL, "Torstol");
+		FARMING.put(ItemID.UNIDENTIFIED_HUASCA, "Huasca");
 	}
 
 	private ActivityClassifier()
@@ -110,15 +168,7 @@ public final class ActivityClassifier
 
 	private static Map<Integer, String> tableFor(Skill skill)
 	{
-		if (skill == Skill.WOODCUTTING)
-		{
-			return WOODCUTTING;
-		}
-		if (skill == Skill.FISHING)
-		{
-			return FISHING;
-		}
-		return null;
+		return skill == null ? null : TABLES.get(skill);
 	}
 
 	/**
@@ -127,14 +177,6 @@ public final class ActivityClassifier
 	 */
 	public static String outputNoun(Skill skill)
 	{
-		if (skill == Skill.WOODCUTTING)
-		{
-			return "Logs";
-		}
-		if (skill == Skill.FISHING)
-		{
-			return "Catches";
-		}
-		return "Produced";
+		return skill == null ? "Produced" : OUTPUT_NOUNS.getOrDefault(skill, "Produced");
 	}
 }

@@ -72,12 +72,40 @@ public class ActivityClassifierTest
 	@Test
 	public void skillWithoutATableStaysUnclassified()
 	{
-		// Mining isn't covered yet - §15 requires it still tracks fine,
-		// just without a named method
-		ActivitySession s = session(Skill.MINING);
+		// Agility produces nothing that identifies a course, so it can't be
+		// classified from item output at all - §15 requires it still tracks
+		// fine, just without a named method. Deliberately not a skill that
+		// might later gain a table, so this keeps testing the invariant.
+		ActivitySession s = session(Skill.AGILITY);
 		s.addGenerated(ItemID.IRON_ORE, 30);
 
 		assertEquals(ActivityClassifier.UNCLASSIFIED, ActivityClassifier.classify(s));
+	}
+
+	@Test
+	public void coversTheGatheringSkillsAdded()
+	{
+		ActivitySession mining = session(Skill.MINING);
+		mining.addGenerated(ItemID.RUNITE_ORE, 8);
+		assertEquals("Runite ore", ActivityClassifier.classify(mining));
+
+		ActivitySession hunter = session(Skill.HUNTER);
+		hunter.addGenerated(ItemID.CHINCHOMPA_BLACK, 200);
+		assertEquals("Black chinchompas", ActivityClassifier.classify(hunter));
+
+		ActivitySession farming = session(Skill.FARMING);
+		farming.addGenerated(ItemID.UNIDENTIFIED_RANARR, 30);
+		assertEquals("Ranarr", ActivityClassifier.classify(farming));
+	}
+
+	@Test
+	public void bothEssenceTypesShareOneActivityName()
+	{
+		ActivitySession s = session(Skill.MINING);
+		s.addGenerated(ItemID.BLANKRUNE, 100);
+		s.addGenerated(ItemID.BLANKRUNE_HIGH, 40);
+
+		assertEquals("Essence", ActivityClassifier.classify(s));
 	}
 
 	@Test
@@ -91,6 +119,9 @@ public class ActivityClassifierTest
 	{
 		assertEquals("Logs", ActivityClassifier.outputNoun(Skill.WOODCUTTING));
 		assertEquals("Catches", ActivityClassifier.outputNoun(Skill.FISHING));
-		assertEquals("Produced", ActivityClassifier.outputNoun(Skill.MINING));
+		assertEquals("Ores", ActivityClassifier.outputNoun(Skill.MINING));
+		assertEquals("Harvested", ActivityClassifier.outputNoun(Skill.FARMING));
+		// uncovered skills fall back rather than showing a wrong noun
+		assertEquals("Produced", ActivityClassifier.outputNoun(Skill.AGILITY));
 	}
 }
