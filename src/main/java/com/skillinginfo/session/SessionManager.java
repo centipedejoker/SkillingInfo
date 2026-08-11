@@ -210,11 +210,25 @@ public class SessionManager
 		{
 			groupKeysThisTick.add(TrackingGroups.groupKey(skill));
 		}
-		boolean rewardBurstTick = groupKeysThisTick.size() > 1;
+		// SPEC.md §9 [v7]: some equipment awards a second skill incidentally
+		// on a single action - infernal tools (Woodcutting+Firemaking etc),
+		// bonecrusher, herbicide. Those aren't reward bursts, but they do
+		// look exactly like one, which previously made it impossible to
+		// start a session at all while using them.
+		Skill primaryGroupKey = TrackingGroups.resolvePrimary(groupKeysThisTick);
+		boolean rewardBurstTick = groupKeysThisTick.size() > 1 && primaryGroupKey == null;
 
 		for (Map.Entry<Skill, Integer> entry : pendingTickDeltas.entrySet())
 		{
-			if (rewardBurstTick)
+			Skill groupKey = TrackingGroups.groupKey(entry.getKey());
+
+			// A byproduct's XP is still real and still credited to the
+			// session, but it must never drive detection or start a session
+			// of its own - an infernal axe shouldn't offer you a Firemaking
+			// session while you're chopping.
+			boolean isIncidentalByproduct = primaryGroupKey != null && groupKey != primaryGroupKey;
+
+			if (rewardBurstTick || isIncidentalByproduct)
 			{
 				creditActiveSessionOnly(entry.getKey(), entry.getValue());
 			}

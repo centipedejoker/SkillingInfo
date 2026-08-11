@@ -300,6 +300,14 @@ probable activity → prompt
 
 **`[v2]` Same-skill reward bursts are not caught by the multi-skill rule above.** Some quests and minigames grant several same-skill XP drops in quick succession as separate reward lines (e.g. three `StatChanged` events for Fishing fired across one quest-completion sequence) — this can satisfy the naive "same skill, 3–5 drops, within 90s" gate and false-positive as a real activity. Add a source-correlation check: an XP event is excluded from candidate buffering (regardless of skill or count) when it lands in the same game tick as a quest-completion widget, a reward-message chat event, or while a non-gameplay interface (quest reward screen, minigame reward screen) is open. This is a cheap, deterministic signal available from existing `ScriptPostFired`/`ChatMessage`/`WidgetLoaded` events and closes the false-positive path without adding statistical complexity.
 
+**`[v7]` Equipment that awards a second skill on one action is not a reward burst.** Infernal tools grant two skills simultaneously for a single action — infernal axe (Woodcutting + Firemaking), pickaxe (Mining + Smithing), harpoon (Fishing + Cooking) — as do bonecrusher (Prayer during combat) and herbicide (Herblore during combat). Under the rule above every one of these actions read as a multi-skill burst, which meant **candidate detection could never fire at all while using them** — a silent failure with no error to explain it, and the exact same class of bug as the Hitpoints/combat case that motivated §7a.
+
+The fix is a **directional** primary→byproduct relationship (`TrackingGroups.resolvePrimary`), deliberately *not* a shared group like §7a's `COMBAT_GROUP`. Firemaking, Smithing and Cooking are independently trainable, so permanently grouping them with their primary would corrupt genuine sessions in those skills. The relationship asserts only that "Firemaking XP arriving in the same tick as Woodcutting XP is incidental to the chopping", never the reverse.
+
+When a tick's group keys are one primary plus only its own byproducts, it is treated as a single action: the primary drives candidate detection and session identity, while the byproduct XP is still credited to the session's `xpGained` map (§44 is already a per-skill map) but can never start a session of its own. An infernal axe must not offer you a Firemaking session while you're chopping.
+
+The consumed item itself is deliberately not tracked — a log burned instantly by an infernal axe was never retained, so §17's ledger is correct to omit it. `XpTrackerService`'s action count (§14) still reflects the true number of chops regardless.
+
 ## 10. RETROACTIVE BUFFER
 
 Candidate mode temporarily records: timestamp, XP event, skill, optional activity signals, relevant direct output events.
