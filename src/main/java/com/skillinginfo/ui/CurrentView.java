@@ -1,5 +1,6 @@
 package com.skillinginfo.ui;
 
+import com.skillinginfo.SkillingInfoConfig;
 import com.skillinginfo.session.ActivitySession;
 import com.skillinginfo.session.ItemFlowEntry;
 import com.skillinginfo.session.PromptSummary;
@@ -10,6 +11,7 @@ import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.awt.GridLayout;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -35,6 +37,7 @@ class CurrentView extends JPanel
 	private static final int BUTTON_HEIGHT = 24;
 
 	private final SessionManager sessionManager;
+	private final SkillingInfoConfig config;
 	private final Map<Integer, String> itemNames;
 	private final Runnable onAction;
 
@@ -54,10 +57,12 @@ class CurrentView extends JPanel
 	private final JLabel overallRateValue = new JLabel();
 	private final JButton pauseResumeButton = smallButton("Pause");
 	private final JPanel itemFlowPanel = new JPanel();
+	private final JPanel futureXpPanel = new JPanel();
 
-	CurrentView(SessionManager sessionManager, Map<Integer, String> itemNames, Runnable onAction)
+	CurrentView(SessionManager sessionManager, SkillingInfoConfig config, Map<Integer, String> itemNames, Runnable onAction)
 	{
 		this.sessionManager = sessionManager;
+		this.config = config;
 		this.itemNames = itemNames;
 		this.onAction = onAction;
 
@@ -143,7 +148,10 @@ class CurrentView extends JPanel
 		addStatRow(stats, "Overall XP/hr", overallRateValue);
 
 		itemFlowPanel.setLayout(new BoxLayout(itemFlowPanel, BoxLayout.Y_AXIS));
-		itemFlowPanel.setBorder(BorderFactory.createEmptyBorder(4, 0, 8, 0));
+		itemFlowPanel.setBorder(BorderFactory.createEmptyBorder(4, 0, 4, 0));
+
+		futureXpPanel.setLayout(new BoxLayout(futureXpPanel, BoxLayout.Y_AXIS));
+		futureXpPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 8, 0));
 
 		pauseResumeButton.addActionListener(e -> {
 			if (sessionManager.getState() == SessionState.ACTIVE)
@@ -171,6 +179,7 @@ class CurrentView extends JPanel
 		panel.add(activityLabel);
 		panel.add(stats);
 		panel.add(itemFlowPanel);
+		panel.add(futureXpPanel);
 		panel.add(Box.createVerticalGlue());
 		panel.add(buttons);
 		return panel;
@@ -230,6 +239,7 @@ class CurrentView extends JPanel
 				pauseResumeButton.setText(state == SessionState.ACTIVE ? "Pause" : "Resume");
 
 				refreshItemFlow(session.getItemFlow());
+				refreshFutureXp(session);
 
 				cardLayout.show(cards, SESSION_CARD);
 				break;
@@ -269,6 +279,37 @@ class CurrentView extends JPanel
 		}
 		itemFlowPanel.revalidate();
 		itemFlowPanel.repaint();
+	}
+
+	/**
+	 * SPEC.md §11's FUTURE XP section - per-skill totals for what the
+	 * session's retained/banked resources would eventually yield, each
+	 * labelled with its confidence tier (§33) so a projection can never
+	 * be mistaken for earned XP. Renders nothing at all when no item
+	 * resolves, which is the common and correct case (§35).
+	 */
+	private void refreshFutureXp(ActivitySession session)
+	{
+		futureXpPanel.removeAll();
+
+		List<FutureXpSummary.Row> rows = FutureXpSummary.build(session, config);
+		if (!rows.isEmpty())
+		{
+			JLabel header = new JLabel("Future XP");
+			header.setFont(FontManager.getRunescapeSmallFont());
+			header.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+			futureXpPanel.add(header);
+
+			for (FutureXpSummary.Row row : rows)
+			{
+				JLabel line = new JLabel(row.format());
+				line.setFont(FontManager.getRunescapeSmallFont());
+				futureXpPanel.add(line);
+			}
+		}
+
+		futureXpPanel.revalidate();
+		futureXpPanel.repaint();
 	}
 
 	private static String formatDuration(long totalSeconds)

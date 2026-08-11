@@ -66,4 +66,43 @@ public interface SkillingInfoConfig extends Config
 	{
 		return 600;
 	}
+
+	// ------------------------------------------------------------------
+	// Future XP (spec §33/§35). Items with more than one legitimate use
+	// are configurable rather than assumed - §35 explicitly forbids
+	// forcing a downstream mapping on an ambiguous item.
+	// ------------------------------------------------------------------
+
+	enum LogsUse
+	{
+		FIREMAKING,
+		OFF
+	}
+
+	@ConfigItem(
+		keyName = "logsFutureXp",
+		name = "Logs future XP",
+		description = "What to assume banked logs will be used for. Fletching and Construction are deliberately absent - neither has a single XP value per log (it depends what you make), so projecting one would be a guess dressed up as data (spec §35)."
+	)
+	default LogsUse logsFutureXp()
+	{
+		return LogsUse.FIREMAKING;
+	}
+
+	enum BonesUse
+	{
+		BURY,
+		GILDED_ALTAR,
+		OFF
+	}
+
+	@ConfigItem(
+		keyName = "bonesFutureXp",
+		name = "Bones future XP",
+		description = "What to assume banked bones will be used for. Gilded altar assumes both burners lit (350% of bury XP)."
+	)
+	default BonesUse bonesFutureXp()
+	{
+		return BonesUse.BURY;
+	}
 }

@@ -87,7 +87,7 @@ public class SkillingInfoPlugin extends Plugin
 		sessionManager.init();
 
 		BufferedImage icon = buildIcon();
-		panel = new SkillingInfoPanel(sessionManager, skillIconManager, itemNames, icon);
+		panel = new SkillingInfoPanel(sessionManager, skillIconManager, config, itemNames, icon);
 		panel.refresh();
 
 		navButton = NavigationButton.builder()

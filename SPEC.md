@@ -1073,7 +1073,7 @@ Recommended: "Tracks personal skilling sessions, XP rates, idle time, activity o
 
 `[v7]` **UI simplified to net-only, one line per item** (§65), in both `CurrentView` and `HistoryView`: nobody needs the generated/dropped breakdown at a glance, only what they ended up with, and the multi-stat two-line version was overflowing the sidebar's width. Full breakdown remains backlog for the expandable detail view already logged in §65.
 
-**Phase 4** 🔨 — bank correlation (§25a) and confirmed banked output ✅ **live-validated**; banked/future XP (§33's item→XP table) still to do.
+**Phase 4** ✅ — bank correlation (§25a) and confirmed banked output ✅ **live-validated**; banked/future XP (§33) implemented, pending live validation.
 
 `[v7]` Implementation notes:
 - **`BankCorrelator` owns the single bank snapshot** (§26) and implements §25a's three-way minimum verbatim: `min(bankDelta, invDelta, sessionOutstanding)`. Because it's the spec's most safety-critical mechanism and is pure logic, it's covered by real unit tests (`BankCorrelatorTest`, 9 cases drawn from §55's list) rather than live play-testing alone — including §27's worked example, withdraw-then-redeposit inertness, Deposit-All independence, and the first-open baseline case.
@@ -1082,6 +1082,16 @@ Recommended: "Tracks personal skilling sessions, XP rates, idle time, activity o
 - **Unresolved bank deltas are discarded, not carried forward** (§25a step 5) — an unattributable deposit stays unattributed rather than giving a later tick a chance to misattribute it.
 - **`getOutstandingForBanking()` = netRetained − banked**, i.e. acquired this session and still in inventory. Banking deliberately does *not* reduce net retained (§33: a banked item is the *strongest* account-gain state, not a loss).
 - Deferred: `tripBoundaries` population on bank-open (§39) still isn't wired — it needs reliable bank-open detection rather than inferring from container changes, and it stays Phase 6 scope.
+
+`[v7]` **Future XP (§33/§35) — the ambiguity problem, and how it was resolved.** §33 called for a small item→XP table, but §35 forbids forcing a downstream mapping where an item has several legitimate uses — and it names logs (Firemaking/Fletching/Construction) as its own example. Most gathering output is ambiguous in exactly that way, so a naive table would either cover almost nothing or start guessing. Resolution: unambiguous items map unconditionally, ambiguous ones are **user-configurable and switchable off**.
+
+- **Cooking** (raw fish → cooked): always on, genuinely one use.
+- **Firemaking** (logs): config `logsFutureXp`, default on. Fletching and Construction are deliberately *not* offered — neither has a single XP value per log, so offering them would just relocate the guess into a dropdown.
+- **Prayer** (bones): config `bonesFutureXp` — Bury (default) or Gilded altar (×3.5 of bury, both burners lit).
+- **Not covered, deliberately:** ores → Smithing (bars need coal at varying ratios), herbs → Herblore (needs secondaries). These have no honest per-item value.
+- Anything unmapped simply shows no projection. Undercovering is the correct failure mode here (§35), so `FutureXpResolverTest` asserts that ores and herbs return null — a test that fails loudly if someone later "helpfully" fills the gaps in.
+- **Confidence is a first-class field, not just wording** (§33 [v4]): each per-skill total prefers confirmed-banked quantity and falls back to retained, labelled `(banked)` or `(retained)`. A skill's total can only be as strong as its weakest contributing item, so a mixed total is never labelled "banked".
+- XP values were verified against TheStonedTurtle's `banked-experience` (BSD 2-Clause, §5) rather than written from memory — inventing plausible-looking XP numbers is precisely the failure §33 warns about. Only unnoted item ids resolve; noted stacks are a different id, an accepted limitation.
 
 **Phase 5** — activity modules.
 
