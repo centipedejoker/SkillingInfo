@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -66,6 +67,15 @@ public class SessionManager
 	// tick XP was credited and accept a small trailing window instead.
 	private static final int GENERATION_WINDOW_TICKS = 2;
 	private int lastXpCreditTick = Integer.MIN_VALUE / 2;
+
+	// SPEC.md §6/§10 "buffered output events where safe" [v7]: items
+	// generated during the candidate detection window (before Start is
+	// pressed) are buffered the same way XP already is, so a session
+	// doesn't undercount relative to the XP total it started with. Only
+	// generation is backfilled this way - drops during the pre-session
+	// window are a rarer, lower-value case and stay out of scope.
+	private final Map<Integer, Integer> candidateGeneratedBuffer = new HashMap<>();
+	private int lastCandidateXpTick = Integer.MIN_VALUE / 2;
 
 	public SessionManager(SkillingInfoConfig config, SessionRepository repository)
 	{
@@ -204,6 +214,7 @@ public class SessionManager
 		buffers.clear();
 		pendingTickDeltas.clear();
 		candidateGroupKey = null;
+		candidateGeneratedBuffer.clear();
 		state = SessionState.IDLE;
 	}
 
@@ -239,6 +250,14 @@ public class SessionManager
 		{
 			log.debug("Inventory delta at tick {}: increased={} decreased={} (lastXpCreditTick={}, state={})",
 				currentTick, increased, decreased, lastXpCreditTick, state);
+		}
+
+		if (state == SessionState.CANDIDATE && currentTick - lastCandidateXpTick <= GENERATION_WINDOW_TICKS)
+		{
+			for (Map.Entry<Integer, Integer> entry : increased.entrySet())
+			{
+				candidateGeneratedBuffer.merge(entry.getKey(), entry.getValue(), Integer::sum);
+			}
 		}
 
 		if ((state != SessionState.ACTIVE && state != SessionState.PAUSED) || currentSession == null)
@@ -314,6 +333,7 @@ public class SessionManager
 
 		candidateGroupKey = groupKey;
 		state = SessionState.CANDIDATE;
+		lastCandidateXpTick = currentTick;
 		buffers.computeIfAbsent(groupKey, s -> new CandidateBuffer()).add(new QualifyingXpEvent(skill, delta, currentTick));
 	}
 
@@ -336,6 +356,7 @@ public class SessionManager
 			// CANDIDATE forever
 			buffers.remove(candidateGroupKey);
 			candidateGroupKey = null;
+			candidateGeneratedBuffer.clear();
 			state = SessionState.IDLE;
 			return;
 		}
@@ -366,6 +387,7 @@ public class SessionManager
 			// SPEC.md §10: expiry discards the buffer
 			buffers.remove(candidateGroupKey);
 			candidateGroupKey = null;
+			candidateGeneratedBuffer.clear();
 			pendingPrompt = null;
 			state = SessionState.IDLE;
 		}
@@ -425,6 +447,16 @@ public class SessionManager
 			session.setStartedAt(Instant.now());
 		}
 
+		// SPEC.md §6/§10 [v7]: backfill items generated during the
+		// candidate window too, same as XP above - otherwise net retained
+		// silently undercounts relative to the XP total the session
+		// already started with.
+		for (Map.Entry<Integer, Integer> entry : candidateGeneratedBuffer.entrySet())
+		{
+			session.addGenerated(entry.getKey(), entry.getValue());
+		}
+		candidateGeneratedBuffer.clear();
+
 		currentSession = session;
 		clock.reset();
 		inventoryDeltaTracker.reset();
@@ -450,6 +482,7 @@ public class SessionManager
 
 		buffers.remove(candidateGroupKey);
 		candidateGroupKey = null;
+		candidateGeneratedBuffer.clear();
 		pendingPrompt = null;
 		state = SessionState.SUPPRESSED;
 	}

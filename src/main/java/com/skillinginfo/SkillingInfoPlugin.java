@@ -120,15 +120,26 @@ public class SkillingInfoPlugin extends Plugin
 	 * Runs on the client thread (this handler is invoked there, not the
 	 * EDT) so it's safe to call ItemManager here. Resolves and caches the
 	 * name of any item that has shown up in the current session's item
-	 * flow but hasn't been looked up yet.
+	 * flow, or any past session's (history), that hasn't been looked up
+	 * yet - the history panel needs names too, not just the live view.
+	 * computeIfAbsent makes repeat calls a cheap no-op once cached, so
+	 * doing this every tick against a small history list is fine.
 	 */
 	private void resolveItemNames()
 	{
-		ActivitySession session = sessionManager.getCurrentSession();
-		if (session == null)
+		ActivitySession current = sessionManager.getCurrentSession();
+		if (current != null)
 		{
-			return;
+			resolveItemNames(current);
 		}
+		for (ActivitySession session : sessionManager.getHistory())
+		{
+			resolveItemNames(session);
+		}
+	}
+
+	private void resolveItemNames(ActivitySession session)
+	{
 		for (ItemFlowEntry entry : session.getItemFlow())
 		{
 			itemNames.computeIfAbsent(entry.getItemId(), id -> itemManager.getItemComposition(id).getName());

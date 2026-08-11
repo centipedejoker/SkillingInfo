@@ -1,11 +1,13 @@
 package com.skillinginfo.ui;
 
 import com.skillinginfo.session.ActivitySession;
+import com.skillinginfo.session.ItemFlowEntry;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JLabel;
@@ -18,18 +20,24 @@ import net.runelite.client.ui.FontManager;
 
 /**
  * Completed-session list for one skill at a time, reached via the skill
- * icon tab bar (SPEC.md §65, §43). Phase 1 shows the performance summary
- * only; item-flow lines (banked, future XP) are added once ItemFlowTracker
- * exists in Phase 2+.
+ * icon tab bar (SPEC.md §65, §43).
+ * <p>
+ * `[v7]` Backlog, not yet built: expandable rows to cut clutter, and a
+ * per-skill summary total above the list (SPEC.md §65 backlog note) - for
+ * now every item generated this session gets its own line, which is
+ * correct but will get long for varied sessions.
  */
 class HistoryView extends JPanel
 {
 	private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("MMM d, HH:mm").withZone(ZoneId.systemDefault());
 
+	private final Map<Integer, String> itemNames;
 	private final JPanel listPanel = new JPanel();
 
-	HistoryView()
+	HistoryView(Map<Integer, String> itemNames)
 	{
+		this.itemNames = itemNames;
+
 		setLayout(new BorderLayout());
 		listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
 
@@ -95,6 +103,21 @@ class HistoryView extends JPanel
 
 		row.add(title);
 		row.add(detail);
+
+		for (ItemFlowEntry entry : session.getItemFlow())
+		{
+			if (entry.getGenerated() <= 0)
+			{
+				continue;
+			}
+			String name = itemNames.getOrDefault(entry.getItemId(), "Item #" + entry.getItemId());
+			JLabel itemLine = new JLabel(String.format("%s: Gen %,d · Dropped %,d · Net %,d",
+				name, entry.getGenerated(), entry.getDropped(), entry.getNetRetained()));
+			itemLine.setFont(FontManager.getRunescapeSmallFont());
+			itemLine.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+			row.add(itemLine);
+		}
+
 		return row;
 	}
 }

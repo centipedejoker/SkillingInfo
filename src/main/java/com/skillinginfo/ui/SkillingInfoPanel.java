@@ -58,7 +58,7 @@ public class SkillingInfoPanel extends PluginPanel
 		setLayout(new BorderLayout());
 
 		currentView = new CurrentView(sessionManager, itemNames, this::refresh);
-		historyView = new HistoryView();
+		historyView = new HistoryView(itemNames);
 
 		cards.add(currentView, CURRENT_CARD);
 		cards.add(historyView, HISTORY_CARD);
