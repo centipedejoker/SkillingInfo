@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Item;
 import net.runelite.api.Skill;
 
@@ -26,6 +27,7 @@ import net.runelite.api.Skill;
  * group" within a single in-flight slot, it doesn't track several groups
  * at once.
  */
+@Slf4j
 public class SessionManager
 {
 	private final SkillingInfoConfig config;
@@ -57,7 +59,13 @@ public class SessionManager
 	private int promptExpiresAtTick;
 	private int lastQualifyingTick;
 	private int currentTick;
-	private boolean xpCreditedThisTick;
+
+	// SPEC.md §16 [v7 fix]: RuneLite doesn't guarantee the inventory update
+	// for a skilling action lands in the exact same tick as its XP - an
+	// exact-tick check silently attributed nothing, ever. Track the last
+	// tick XP was credited and accept a small trailing window instead.
+	private static final int GENERATION_WINDOW_TICKS = 2;
+	private int lastXpCreditTick = Integer.MIN_VALUE / 2;
 
 	public SessionManager(SkillingInfoConfig config, SessionRepository repository)
 	{
@@ -136,7 +144,6 @@ public class SessionManager
 	public void onGameTick(int tick)
 	{
 		this.currentTick = tick;
-		xpCreditedThisTick = false;
 
 		// SPEC.md §9 [v4]: more than one *group key* (§7a) changing in the
 		// same tick is the reward-burst signal, not more than one raw skill
@@ -211,32 +218,39 @@ public class SessionManager
 		{
 			currentSession.addXp(skill, delta);
 			lastQualifyingTick = currentTick;
-			xpCreditedThisTick = true;
+			lastXpCreditTick = currentTick;
 		}
 	}
 
 	/**
 	 * SPEC.md §16: correlates this tick's inventory deltas against the
-	 * current session. Generation is attributed only on a tick that also
-	 * credited qualifying XP to the session - inventory gained/dropped
-	 * outside that (e.g. picking something off the ground) isn't
-	 * "generated" in Phase 2's sense; ground pickup gets its own
-	 * correlator in Phase 3.
+	 * current session. Generation is attributed only within a small window
+	 * of ticks after XP was last credited to the session (§16 [v7 fix]) -
+	 * inventory gained well outside that window (e.g. picking something up
+	 * off the ground) isn't "generated" in Phase 2's sense; ground pickup
+	 * gets its own correlator in Phase 3.
 	 */
 	private void creditItemFlow()
 	{
 		Map<Integer, Integer> increased = inventoryDeltaTracker.consumeIncreased();
 		Map<Integer, Integer> decreased = inventoryDeltaTracker.consumeDecreased();
 
+		if (!increased.isEmpty() || !decreased.isEmpty())
+		{
+			log.debug("Inventory delta at tick {}: increased={} decreased={} (lastXpCreditTick={}, state={})",
+				currentTick, increased, decreased, lastXpCreditTick, state);
+		}
+
 		if ((state != SessionState.ACTIVE && state != SessionState.PAUSED) || currentSession == null)
 		{
 			return;
 		}
 
-		if (xpCreditedThisTick)
+		if (currentTick - lastXpCreditTick <= GENERATION_WINDOW_TICKS)
 		{
 			for (Map.Entry<Integer, Integer> entry : increased.entrySet())
 			{
+				log.debug("Crediting generated: itemId={} qty={}", entry.getKey(), entry.getValue());
 				currentSession.addGenerated(entry.getKey(), entry.getValue());
 			}
 		}
@@ -261,7 +275,7 @@ public class SessionManager
 		{
 			currentSession.addXp(skill, delta);
 			lastQualifyingTick = currentTick;
-			xpCreditedThisTick = true;
+			lastXpCreditTick = currentTick;
 			return;
 		}
 
@@ -269,7 +283,7 @@ public class SessionManager
 		{
 			currentSession.addXp(skill, delta);
 			lastQualifyingTick = currentTick;
-			xpCreditedThisTick = true;
+			lastXpCreditTick = currentTick;
 			state = SessionState.ACTIVE; // [v2] resume threshold = 1 event, distinct from start threshold
 			return;
 		}
@@ -416,6 +430,7 @@ public class SessionManager
 		inventoryDeltaTracker.reset();
 		dropCorrelator.reset();
 		lastQualifyingTick = currentTick;
+		lastXpCreditTick = currentTick;
 
 		buffers.remove(candidateGroupKey);
 		candidateGroupKey = null;
