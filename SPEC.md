@@ -1102,7 +1102,15 @@ Recommended: "Tracks personal skilling sessions, XP rates, idle time, activity o
 
 **Phase 6** — Slayer; KPH; task loadouts; loot flow; trip support (activates the `tripBoundaries` field pre-wired in Phase 1).
 
-**Phase 7** — documentation; screenshots; tests; Plugin Hub release.
+**Phase 7** — **UI design pass**; documentation; screenshots; tests; Plugin Hub release.
+
+`[v7]` **The UI pass is a first-class Phase 7 deliverable, not polish-if-there's-time.** Up to this point the panel has accreted one section per phase with no design pass, and it shows. Deferring it to pre-release is a deliberate call (build features against a stable data model first, design once against the full picture) — but it is explicitly scheduled, and §59's release screenshots are gated on it. Scope, in priority order:
+
+1. **Item icons** — render actual item images per row (`ItemManager.getImage`), the way Loot Tracker and banked-experience do. Currently every item is plain grey text, which is the single biggest reason the panel reads as unfinished.
+2. **Visual hierarchy** — section dividers, distinct headers, deliberate use of weight and `ColorScheme` colour so the panel reads as structured rather than as one undifferentiated block.
+3. **Collapse/expand + per-skill summary** — the two long-standing backlog items: collapsible per-item detail (which is also where the full generated/dropped/repicked breakdown finally lives, rather than being permanently hidden), and an aggregate summary at the top of each skill's history.
+
+Out of scope for the pass unless the owner supplies artwork: the plugin's own `NavigationButton`/listing icon, still the placeholder "SI" circle drawn in code (§66).
 
 ## 62. PRODUCT NORTH STAR
 
@@ -1151,11 +1159,12 @@ What RuneLite actually restricts, versus what's just our own discipline to nail 
 
 **`[v7]` History now shows item flow, not just time/XP/rate.** Live playtest found `HistoryView` was silently dropping the item-flow data entirely — it was persisted to `sessions.jsonl` correctly, just never rendered. Each history row now lists every item generated this session (name, generated/dropped/net) the same way `CurrentView`'s live OUTPUT section does, sharing the same client-thread-resolved name cache (§66's `ItemManager` note applies here too).
 
-**`[v7]` Backlog — explicitly deferred, not forgotten:**
+**`[v7]` Backlog — now scheduled into Phase 7's UI pass (§61), not open-ended:**
 - **Expandable history rows.** Every item-flow line currently always renders, which is correct but will get long for a varied session (many item types). Collapse to a summary line by default, expand for the full per-item breakdown.
 - **Per-skill summary section above the history list.** An aggregate across all of a skill's sessions (total time, total XP, total banked/retained) shown once at the top of that skill's filtered history, rather than requiring the user to mentally sum individual session rows.
+- **Item icons and visual hierarchy.** Added to the list after live use: the panel is currently plain text with no icons and no section structure, which reads as unfinished next to Loot Tracker/banked-experience.
 
-Both are pure UI/UX polish with no data-model implications — `ActivitySession`/`ItemFlowEntry` already carry everything either feature would need.
+None of these have data-model implications — `ActivitySession`/`ItemFlowEntry` already carry everything they need, which is why deferring them is safe rather than accumulating real debt.
 
 ## 66. DEPLOYMENT ARTIFACTS `[v5]`
 
