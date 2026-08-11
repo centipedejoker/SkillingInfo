@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(gh api *)",
+      "Read(//tmp/**)",
+      "Bash(gh api repos/runelite/plugin-hub/contents/plugins --paginate --jq '.[].name' 2>&1 | sort -u > /tmp/hub_plugins_full.txt; wc -l /tmp/hub_plugins_full.txt *)",
+      "Bash(grep -iE \"info$|-info-\" /tmp/hub_plugins_tree.txt)"
+    ]
+  }
+}
