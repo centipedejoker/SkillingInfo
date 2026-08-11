@@ -124,6 +124,33 @@ public class ActivitySession
 		return entry == null ? 0 : entry.getOutstandingForBanking();
 	}
 
+	/** SPEC.md §40: total units produced by the activity - "logs", "catches". */
+	public int getTotalGenerated()
+	{
+		return itemFlow.values().stream().mapToInt(ItemFlowEntry::getGenerated).sum();
+	}
+
+	public int getTotalNetRetained()
+	{
+		return itemFlow.values().stream().mapToInt(ItemFlowEntry::getNetRetained).sum();
+	}
+
+	public int getTotalBanked()
+	{
+		return itemFlow.values().stream().mapToInt(ItemFlowEntry::getBanked).sum();
+	}
+
+	/**
+	 * SPEC.md §32: net retained / total generated. Returns -1 when nothing
+	 * has been generated yet, so callers can hide the row rather than
+	 * showing a meaningless 0% or dividing by zero.
+	 */
+	public double getRetentionRate()
+	{
+		int generated = getTotalGenerated();
+		return generated <= 0 ? -1 : getTotalNetRetained() / (double) generated;
+	}
+
 	public Collection<ItemFlowEntry> getItemFlow()
 	{
 		return itemFlow.values();

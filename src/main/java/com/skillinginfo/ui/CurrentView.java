@@ -1,5 +1,6 @@
 package com.skillinginfo.ui;
 
+import com.skillinginfo.session.ActivityClassifier;
 import com.skillinginfo.session.ActivitySession;
 import com.skillinginfo.session.FutureXpResolver;
 import com.skillinginfo.session.ItemFlowEntry;
@@ -62,6 +63,12 @@ class CurrentView extends JPanel
 	private final JLabel xpValue = new JLabel();
 	private final JLabel activeRateValue = new JLabel();
 	private final JLabel overallRateValue = new JLabel();
+	private final JLabel producedLabel = new JLabel();
+	private final JLabel producedValue = new JLabel();
+	private final JLabel producedRateLabel = new JLabel();
+	private final JLabel producedRateValue = new JLabel();
+	private final JLabel retentionLabel = new JLabel();
+	private final JLabel retentionValue = new JLabel();
 	private final JButton pauseResumeButton = smallButton("Pause");
 	private final JPanel itemFlowPanel = new JPanel();
 	private final JPanel futureXpPanel = new JPanel();
@@ -162,6 +169,11 @@ class CurrentView extends JPanel
 		addStatRow(stats, "XP", xpValue);
 		addStatRow(stats, "Active XP/hr", activeRateValue);
 		addStatRow(stats, "Overall XP/hr", overallRateValue);
+		// SPEC.md §40's per-activity outputs. Labels are set at refresh
+		// time because the noun depends on the skill ("Logs" vs "Catches").
+		addStatRow(stats, producedLabel, producedValue);
+		addStatRow(stats, producedRateLabel, producedRateValue);
+		addStatRow(stats, retentionLabel, retentionValue);
 
 		itemFlowPanel.setLayout(new BoxLayout(itemFlowPanel, BoxLayout.Y_AXIS));
 		itemFlowPanel.setBorder(BorderFactory.createEmptyBorder(4, 0, 4, 0));
@@ -203,7 +215,11 @@ class CurrentView extends JPanel
 
 	private void addStatRow(JPanel stats, String label, JLabel value)
 	{
-		JLabel labelComponent = new JLabel(label);
+		addStatRow(stats, new JLabel(label), value);
+	}
+
+	private void addStatRow(JPanel stats, JLabel labelComponent, JLabel value)
+	{
 		labelComponent.setFont(FontManager.getRunescapeSmallFont());
 		labelComponent.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 		value.setFont(FontManager.getRunescapeSmallFont());
@@ -253,6 +269,8 @@ class CurrentView extends JPanel
 				activeRateValue.setText(formatRate(xp, active));
 				overallRateValue.setText(formatRate(xp, total));
 				pauseResumeButton.setText(state == SessionState.ACTIVE ? "Pause" : "Resume");
+
+				refreshActivityOutputs(session, active);
 
 				refreshItemFlow(session.getItemFlow());
 				refreshFutureXp(session);
@@ -370,6 +388,45 @@ class CurrentView extends JPanel
 			}
 		});
 		return combo;
+	}
+
+	/**
+	 * SPEC.md §40's per-activity outputs: units produced, units/hour, and
+	 * retention (§32). Rows hide themselves when there's nothing to show,
+	 * so a session that hasn't produced anything - or a skill with no
+	 * item output at all - doesn't display empty stats.
+	 */
+	private void refreshActivityOutputs(ActivitySession session, long activeSeconds)
+	{
+		int produced = session.getTotalGenerated();
+		boolean show = produced > 0;
+
+		producedLabel.setVisible(show);
+		producedValue.setVisible(show);
+		producedRateLabel.setVisible(show);
+		producedRateValue.setVisible(show);
+
+		if (show)
+		{
+			String noun = ActivityClassifier.outputNoun(session.getSkill());
+			producedLabel.setText(noun);
+			producedValue.setText(String.format("%,d", produced));
+
+			producedRateLabel.setText(noun + "/hr");
+			producedRateValue.setText(activeSeconds > 0
+				? String.format("%,d", Math.round(produced / (double) activeSeconds * 3600))
+				: "0");
+		}
+
+		double retention = session.getRetentionRate();
+		boolean showRetention = retention >= 0;
+		retentionLabel.setVisible(showRetention);
+		retentionValue.setVisible(showRetention);
+		if (showRetention)
+		{
+			retentionLabel.setText("Retention");
+			retentionValue.setText(String.format("%.1f%%", retention * 100));
+		}
 	}
 
 	/**

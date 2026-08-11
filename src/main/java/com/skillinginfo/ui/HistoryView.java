@@ -88,9 +88,23 @@ class HistoryView extends JPanel
 			BorderFactory.createEmptyBorder(4, 0, 4, 0),
 			BorderFactory.createEmptyBorder(6, 8, 6, 8)));
 
-		String when = session.getStartedAt() != null ? DATE_FORMAT.format(session.getStartedAt()) : session.getActivity();
-		JLabel title = new JLabel(when);
+		// activity name leads (§16) - "Oak trees" identifies a session far
+		// better than its timestamp does; the date is the subtitle
+		JLabel title = new JLabel(session.getActivity());
 		title.setFont(FontManager.getRunescapeSmallFont());
+
+		if (session.getStartedAt() != null)
+		{
+			JLabel when = new JLabel(DATE_FORMAT.format(session.getStartedAt()));
+			when.setFont(FontManager.getRunescapeSmallFont());
+			when.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+			row.add(title);
+			row.add(when);
+		}
+		else
+		{
+			row.add(title);
+		}
 
 		long activeSeconds = session.getActiveSeconds();
 		int xp = session.getXpGained(session.getSkill());
@@ -101,7 +115,6 @@ class HistoryView extends JPanel
 		detail.setFont(FontManager.getRunescapeSmallFont());
 		detail.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 
-		row.add(title);
 		row.add(detail);
 
 		// [v7] net only, one line per item - see CurrentView.refreshItemFlow

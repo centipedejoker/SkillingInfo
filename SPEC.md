@@ -1098,7 +1098,14 @@ Recommended: "Tracks personal skilling sessions, XP rates, idle time, activity o
 - **Confidence is a first-class field, not just wording** (§33 [v4]): each per-skill total prefers confirmed-banked quantity and falls back to retained, labelled `(banked)` or `(retained)`. A skill's total can only be as strong as its weakest contributing item, so a mixed total is never labelled "banked".
 - XP values were verified against TheStonedTurtle's `banked-experience` (BSD 2-Clause, §5) rather than written from memory — inventing plausible-looking XP numbers is precisely the failure §33 warns about. Only unnoted item ids resolve; noted stacks are a different id, an accepted limitation.
 
-**Phase 5** — activity modules.
+**Phase 5** 🔨 — activity modules. Woodcutting and Fishing implemented, pending live validation; other skills still fall back to §15's generic tracking.
+
+`[v7]` Implementation notes:
+- **Classification is derived from what the session produced**, not from animation/object/region ids. That's the most conservative deterministic signal available (§16), it's already tracked reliably from Phase 2, and it can't break when Jagex renumbers content. Reclassified every tick, so the name sharpens as evidence accumulates rather than being locked in by the first item seen.
+- **Dominant output wins**, so an incidental by-catch can't rename the session, and only *generated* items count — something picked up off the ground isn't evidence of the method being used.
+- **Fishing is named by method, not by fish** ("Fly fishing", not "Trout"), since that's what a player calls the activity. Spots yielding two fish map both items to the same name so a mixed catch still classifies cleanly.
+- **Unclassified remains a correct answer** (§15/§16): unrecognised output, or a skill with no table yet, tracks perfectly well without a named method. Tests assert this rather than treating it as a gap.
+- §40's outputs are now shown: units produced, units/hour (with a skill-appropriate noun — "Logs/hr", "Catches/hr") and retention rate (§32). Rows hide themselves when there's nothing to show.
 
 **Phase 6** — Slayer; KPH; task loadouts; loot flow; trip support (activates the `tripBoundaries` field pre-wired in Phase 1).
 

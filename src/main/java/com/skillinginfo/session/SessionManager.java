@@ -368,6 +368,11 @@ public class SessionManager
 			// beyond XP in the first place
 			recordNonXpActivity();
 		}
+
+		// SPEC.md §16: reclassify from what's been produced so far. Cheap,
+		// and re-running it every tick means the name sharpens as evidence
+		// accumulates rather than being fixed by the first item seen.
+		currentSession.setActivity(ActivityClassifier.classify(currentSession));
 	}
 
 	/**
