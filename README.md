@@ -83,20 +83,28 @@ client with it pre-loaded — there's no way to see it working without that.
 1. Install a JDK — version 11 or newer (RuneLite's minimum).
    ```bash
    brew install openjdk@17
+   sudo ln -sfn /opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-17.jdk
    ```
-2. Install Gradle, then generate the wrapper (not committed to this repo yet):
-   ```bash
-   brew install gradle
-   cd "Skilling Info"
-   gradle wrapper
-   ```
-   This creates `gradlew`, `gradlew.bat`, and `gradle/wrapper/` — commit
-   them once generated so `./gradlew` works without a system Gradle install
-   from then on.
+   The `sudo` step makes `java`/`./gradlew` find it system-wide. Verify with
+   `java -version`.
+2. The Gradle wrapper (`gradlew`, `gradlew.bat`, `gradle/wrapper/`) is
+   already committed — no separate Gradle install needed.
 3. Open the project folder in IntelliJ IDEA (Community Edition is fine) and
    let it import the Gradle project — this resolves `net.runelite:client`
    from `https://repo.runelite.net` automatically, no local RuneLite
    checkout needed.
+4. **Jagex account login** — a locally-built client can't do the Jagex
+   Launcher's OAuth flow itself, so it borrows credentials from one that
+   can ([RuneLite wiki: Using Jagex Accounts](https://github.com/runelite/runelite/wiki/Using-Jagex-Accounts)):
+   1. Open the official Jagex Launcher (2.6.3+), edit the RuneLite entry,
+      add `--insecure-write-credentials` to its Client arguments.
+   2. Launch RuneLite from the Jagex Launcher with that flag and log in
+      normally once — this writes `~/.runelite/credentials.properties`.
+   3. `./gradlew run` (below) will pick that file up automatically.
+   4. That file can log into your account directly, bypassing your
+      password — don't share it, and delete it when you're done testing
+      (or use "End sessions" under runescape.com account settings to
+      invalidate it).
 
 **Every time you want to test a change:**
 
@@ -107,16 +115,25 @@ client with it pre-loaded — there's no way to see it working without that.
 This compiles the plugin and launches a full RuneLite client with Skilling
 Info already loaded alongside every core plugin (`SkillingInfoPluginTest`,
 the standard `runelite/example-plugin` pattern — not a JUnit test despite
-the name/location). Log in with a real or alt OSRS account, open the
-sidebar, and the Skilling Info icon should be there.
+the name/location). Log in and check the sidebar for the Skilling Info
+icon.
 
 From IntelliJ instead: right-click
 `src/test/java/com/skillinginfo/SkillingInfoPluginTest.java` → **Run**. Same
 effect, with breakpoints available.
 
-**If it doesn't compile or launch:** that's expected the first time — this
-scaffold has been reviewed by hand but never actually built (§67 of
-`SPEC.md`). Send me the compiler error or stack trace and I'll fix it.
+**macOS note:** the `run` task already passes
+`--add-exports=java.desktop/com.apple.eawt=ALL-UNNAMED` — without it,
+RuneLite's `OSXFullScreenAdapter` hits a Java 17 module-access error and
+the client fails to open at all. If you're not using the `run` task
+directly (e.g. a custom IDE run configuration), add that JVM arg yourself.
+
+This has been verified end-to-end: `./gradlew build` compiles cleanly, and
+`SkillingInfoPlugin` starts up, registers its `GameTick`/`StatChanged`/
+`GameStateChanged` subscribers, and reaches `Plugin SkillingInfoPlugin is
+now running` with zero exceptions. What hasn't been verified from this
+environment is the sidebar rendering correctly and behaving right in a real
+play session — that part's still on you.
 
 ## Compliance
 
