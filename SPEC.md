@@ -1051,7 +1051,7 @@ Recommended: "Tracks personal skilling sessions, XP rates, idle time, activity o
 
 **Phase 1** — plugin shell; Bossing Info-style sidebar; candidate XP detection; Start/Ignore; XP; active/idle/overall time; Pause/Resume/Stop; history. Include `tripBoundaries` field in the session schema even though unused (§39).
 
-**Phase 2** ✅ — direct skilling output; inventory delta engine; confirmed drops; retained output.
+**Phase 2** ✅ **live-validated** — direct skilling output; inventory delta engine; confirmed drops; retained output. Generation, drops, retention, candidate-window backfill, and the history display all confirmed working in real gameplay (§65/§67), not just compiling.
 
 `[v7]` Implementation notes and simplifications:
 - **Direct acquisition** uses a small trailing-window heuristic, not activity classification: any inventory increase landing within `GENERATION_WINDOW_TICKS` (2) of the last XP credited to the session is attributed as generated/directly-acquired (§16's "conservative deterministic signals" — no per-activity knowledge required). `[v7]` Originally an exact-same-tick check, which live playtesting showed never actually matched — RuneLite doesn't guarantee the inventory update and its XP land in the same tick. This only fires for gathering skills, where the resource lands straight in inventory; combat/Slayer generation is ground-based and comes online in Phase 3 (pickup) and Phase 6 (loot flow) as originally planned.
