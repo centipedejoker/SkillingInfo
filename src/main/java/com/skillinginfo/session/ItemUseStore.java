@@ -1,5 +1,6 @@
 package com.skillinginfo.session;
 
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.config.ConfigManager;
 
 /**
@@ -12,6 +13,7 @@ import net.runelite.client.config.ConfigManager;
  * per-item activity picks (§5), via dynamic keys rather than a static
  * config interface.
  */
+@Slf4j
 public class ItemUseStore
 {
 	private static final String CONFIG_GROUP = "skillinginfo";
@@ -47,6 +49,7 @@ public class ItemUseStore
 
 	public void set(int itemId, ItemUse use)
 	{
+		log.debug("Saving item use: itemId={} use={}", itemId, use.id);
 		configManager.setConfiguration(CONFIG_GROUP, KEY_PREFIX + itemId, use.id);
 	}
 }

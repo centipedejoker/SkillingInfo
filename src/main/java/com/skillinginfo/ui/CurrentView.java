@@ -13,8 +13,11 @@ import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.awt.GridLayout;
 import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -62,6 +65,15 @@ class CurrentView extends JPanel
 	private final JButton pauseResumeButton = smallButton("Pause");
 	private final JPanel itemFlowPanel = new JPanel();
 	private final JPanel futureXpPanel = new JPanel();
+
+	// Rows are cached and reused across refreshes. refresh() runs every
+	// game tick, and tearing the panel down each time destroyed the use
+	// selectors while the player was interacting with them - the dropdown
+	// would close on open and appear to ignore clicks. Only rebuild when
+	// the set of displayed items actually changes; otherwise just retext
+	// the existing labels. (Same guard as SkillingInfoPanel's tab bar.)
+	private final Map<Integer, JLabel> itemLines = new LinkedHashMap<>();
+	private Set<Integer> renderedItemIds = new LinkedHashSet<>();
 
 	CurrentView(SessionManager sessionManager, ItemUseStore itemUseStore, Map<Integer, String> itemNames, Runnable onAction)
 	{
@@ -268,17 +280,51 @@ class CurrentView extends JPanel
 	 */
 	private void refreshItemFlow(Collection<ItemFlowEntry> entries)
 	{
-		itemFlowPanel.removeAll();
+		List<ItemFlowEntry> visible = new java.util.ArrayList<>();
+		Set<Integer> visibleIds = new LinkedHashSet<>();
 		for (ItemFlowEntry entry : entries)
 		{
-			if (entry.getDirectlyAcquired() <= 0)
+			if (entry.getDirectlyAcquired() > 0)
 			{
-				continue;
+				visible.add(entry);
+				visibleIds.add(entry.getItemId());
 			}
+		}
+
+		if (!visibleIds.equals(renderedItemIds))
+		{
+			rebuildItemFlow(visible, visibleIds);
+		}
+
+		// cheap path: the rows already exist, just update their numbers
+		for (ItemFlowEntry entry : visible)
+		{
+			JLabel line = itemLines.get(entry.getItemId());
+			if (line != null)
+			{
+				String name = itemNames.getOrDefault(entry.getItemId(), "Item #" + entry.getItemId());
+				String text = ItemFlowFormat.line(name, entry);
+				if (!text.equals(line.getText()))
+				{
+					line.setText(text);
+				}
+			}
+		}
+	}
+
+	private void rebuildItemFlow(List<ItemFlowEntry> visible, Set<Integer> visibleIds)
+	{
+		renderedItemIds = visibleIds;
+		itemLines.clear();
+		itemFlowPanel.removeAll();
+
+		for (ItemFlowEntry entry : visible)
+		{
 			String name = itemNames.getOrDefault(entry.getItemId(), "Item #" + entry.getItemId());
 
 			JLabel line = new JLabel(ItemFlowFormat.line(name, entry));
 			line.setFont(FontManager.getRunescapeSmallFont());
+			itemLines.put(entry.getItemId(), line);
 			itemFlowPanel.add(line);
 
 			// only items with a genuine decision get a selector - a
@@ -288,6 +334,7 @@ class CurrentView extends JPanel
 				itemFlowPanel.add(buildUseSelector(entry.getItemId()));
 			}
 		}
+
 		itemFlowPanel.revalidate();
 		itemFlowPanel.repaint();
 	}

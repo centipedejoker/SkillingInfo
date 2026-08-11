@@ -32,4 +32,15 @@ public final class ItemUse
 
 	/** Sentinel for "don't project any future XP for this item". */
 	public static final ItemUse OFF = new ItemUse("OFF", "Off", null, 0);
+
+	/**
+	 * Selection relies on identity (the catalogue hands out singletons), so
+	 * this exists purely as a display fallback - without it, any renderer
+	 * that didn't handle the value would show an object hash.
+	 */
+	@Override
+	public String toString()
+	{
+		return label;
+	}
 }
