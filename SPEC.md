@@ -1098,7 +1098,7 @@ Recommended: "Tracks personal skilling sessions, XP rates, idle time, activity o
 - **Confidence is a first-class field, not just wording** (§33 [v4]): each per-skill total prefers confirmed-banked quantity and falls back to retained, labelled `(banked)` or `(retained)`. A skill's total can only be as strong as its weakest contributing item, so a mixed total is never labelled "banked".
 - XP values were verified against TheStonedTurtle's `banked-experience` (BSD 2-Clause, §5) rather than written from memory — inventing plausible-looking XP numbers is precisely the failure §33 warns about. Only unnoted item ids resolve; noted stacks are a different id, an accepted limitation.
 
-**Phase 5** 🔨 — activity modules. Woodcutting and Fishing implemented, pending live validation; other skills still fall back to §15's generic tracking.
+**Phase 5** 🔨 — activity modules. Woodcutting and Fishing ✅ **live-validated**; other skills still fall back to §15's generic tracking.
 
 `[v7]` Implementation notes:
 - **Classification is derived from what the session produced**, not from animation/object/region ids. That's the most conservative deterministic signal available (§16), it's already tracked reliably from Phase 2, and it can't break when Jagex renumbers content. Reclassified every tick, so the name sharpens as evidence accumulates rather than being locked in by the first item seen.
