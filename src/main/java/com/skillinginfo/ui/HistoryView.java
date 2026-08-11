@@ -104,6 +104,8 @@ class HistoryView extends JPanel
 		row.add(title);
 		row.add(detail);
 
+		// [v7] net only, one line per item - see CurrentView.refreshItemFlow
+		// for why; full breakdown is backlog for the expandable detail view.
 		for (ItemFlowEntry entry : session.getItemFlow())
 		{
 			if (entry.getDirectlyAcquired() <= 0)
@@ -111,8 +113,7 @@ class HistoryView extends JPanel
 				continue;
 			}
 			String name = itemNames.getOrDefault(entry.getItemId(), "Item #" + entry.getItemId());
-			JLabel itemLine = new JLabel(String.format("%s: Acquired %,d · Dropped %,d · Net %,d",
-				name, entry.getDirectlyAcquired(), entry.getDropped(), entry.getNetRetained()));
+			JLabel itemLine = new JLabel(String.format("%s  +%,d", name, entry.getNetRetained()));
 			itemLine.setFont(FontManager.getRunescapeSmallFont());
 			itemLine.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 			row.add(itemLine);

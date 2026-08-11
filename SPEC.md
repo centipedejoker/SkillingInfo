@@ -1069,6 +1069,10 @@ Recommended: "Tracks personal skilling sessions, XP rates, idle time, activity o
 - **Repickup (§22)** is pure session-side bookkeeping, no ground-tracker cross-reference needed: a confirmed pickup first pays down `dropped − repicked` (however much of that item is still "dropped this session, not yet repicked") before any remainder counts as a new pickup. `ItemFlowEntry.directlyAcquired` — and therefore `netRetained` — now aggregates both acquisition channels (generated and picked up), not just direct output; this also fixed a latent gap where a pickup-only item (no matching same-tick XP) wouldn't have shown up in the UI at all under Phase 2's `generated`-gated display.
 - Not backfilled retroactively: pickups during the pre-Start candidate window (unlike generation, which is per the v7 fix above) — a lower-value edge case, deferred.
 
+`[v7]` **Live playtest fix: `PickupCorrelator`'s timeout was too short for a real pickup.** A drop is instant (own inventory, no travel needed) but a ground-item "Take" click often means walking to the item first; the original 5-tick (3s) timeout - copied from `DropCorrelator` without reconsidering whether it fit - silently dropped a pickup that took longer than that to complete, while closer/faster pickups in the same test worked fine. Widened to 30 ticks (18s) for pickups specifically; drops keep the shorter window since they don't have this problem. Debug logging added for `onTakeClicked`/`creditPickup` (mirroring the Phase 2 `creditItemFlow` logging) so a future mismatch is diagnosable rather than guessed at.
+
+`[v7]` **UI simplified to net-only, one line per item** (§65), in both `CurrentView` and `HistoryView`: nobody needs the generated/dropped breakdown at a glance, only what they ended up with, and the multi-stat two-line version was overflowing the sidebar's width. Full breakdown remains backlog for the expandable detail view already logged in §65.
+
 **Phase 4** — bank correlation (§25a); confirmed banked output; banked/future XP.
 
 **Phase 5** — activity modules.

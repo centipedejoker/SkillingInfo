@@ -17,10 +17,16 @@ import java.util.Map;
  * only - §20a's full model (also confirming the item's ground quantity
  * decreased at that tile) is deferred, the same simplification Phase 2
  * made for drops in §21.
+ * <p>
+ * `[v7]` Timeout is longer than {@link DropCorrelator}'s, deliberately.
+ * A drop is instant (own inventory, no travel); a "Take" click on a
+ * distant ground item queues a walk there first, which a drop-length
+ * timeout can miss entirely - live testing showed exactly this pattern
+ * (a distant pickup silently uncredited, closer ones fine).
  */
 public class PickupCorrelator
 {
-	private static final int TIMEOUT_TICKS = 5;
+	private static final int TIMEOUT_TICKS = 30;
 
 	private static final class PendingPickup
 	{

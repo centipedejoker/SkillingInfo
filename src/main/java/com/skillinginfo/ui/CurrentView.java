@@ -241,11 +241,16 @@ class CurrentView extends JPanel
 	}
 
 	/**
-	 * SPEC.md §11/§29 OUTPUT section - one compact row per item acquired
+	 * SPEC.md §11/§29 OUTPUT section - one compact line per item acquired
 	 * this session, from either channel (direct skilling output or ground
 	 * pickup - §20a). Gated on directlyAcquired, not generated, so a
-	 * pickup-only item (no matching same-tick XP) still shows up. Banked/
-	 * future XP light up once Phase 4's bank correlator exists.
+	 * pickup-only item (no matching same-tick XP) still shows up.
+	 * <p>
+	 * `[v7]` Net retained only, not the full generated/dropped breakdown -
+	 * nobody needs "what I dropped" at a glance, only what they ended up
+	 * with; the full breakdown is backlog for the expandable detail view
+	 * (SPEC.md §65). This also keeps each item to one line, since the
+	 * two-line/multi-stat version was overflowing the sidebar's width.
 	 */
 	private void refreshItemFlow(Collection<ItemFlowEntry> entries)
 	{
@@ -258,20 +263,9 @@ class CurrentView extends JPanel
 			}
 			String name = itemNames.getOrDefault(entry.getItemId(), "Item #" + entry.getItemId());
 
-			JLabel title = new JLabel(name);
-			title.setFont(FontManager.getRunescapeSmallFont());
-
-			JLabel detail = new JLabel(String.format("Acquired %,d  ·  Dropped %,d  ·  Net %,d",
-				entry.getDirectlyAcquired(), entry.getDropped(), entry.getNetRetained()));
-			detail.setFont(FontManager.getRunescapeSmallFont());
-			detail.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-
-			JPanel row = new JPanel();
-			row.setLayout(new BoxLayout(row, BoxLayout.Y_AXIS));
-			row.setBorder(BorderFactory.createEmptyBorder(2, 0, 2, 0));
-			row.add(title);
-			row.add(detail);
-			itemFlowPanel.add(row);
+			JLabel line = new JLabel(String.format("%s  +%,d", name, entry.getNetRetained()));
+			line.setFont(FontManager.getRunescapeSmallFont());
+			itemFlowPanel.add(line);
 		}
 		itemFlowPanel.revalidate();
 		itemFlowPanel.repaint();

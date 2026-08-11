@@ -143,6 +143,7 @@ public class SessionManager
 	{
 		if (state == SessionState.ACTIVE || state == SessionState.PAUSED)
 		{
+			log.debug("Take clicked: itemId={} tick={}", itemId, currentTick);
 			pickupCorrelator.onTakeClicked(itemId, currentTick);
 		}
 	}
@@ -349,6 +350,7 @@ public class SessionManager
 		int outstanding = currentSession.getOutstandingDropped(itemId);
 		int repickAmount = Math.min(qty, outstanding);
 		int newAmount = qty - repickAmount;
+		log.debug("Crediting pickup: itemId={} qty={} repicked={} new={}", itemId, qty, repickAmount, newAmount);
 
 		if (repickAmount > 0)
 		{
