@@ -6,6 +6,7 @@ import com.skillinginfo.session.FutureXpResolver;
 import com.skillinginfo.session.ItemFlowEntry;
 import com.skillinginfo.session.ItemUse;
 import com.skillinginfo.session.ItemUseStore;
+import com.skillinginfo.session.LiveRates;
 import com.skillinginfo.session.PromptSummary;
 import com.skillinginfo.session.SessionManager;
 import com.skillinginfo.session.SessionState;
@@ -47,6 +48,7 @@ class CurrentView extends JPanel
 	private final SessionManager sessionManager;
 	private final ItemUseStore itemUseStore;
 	private final Map<Integer, String> itemNames;
+	private final LiveRates liveRates;
 	private final Runnable onAction;
 
 	private final CardLayout cardLayout = new CardLayout();
@@ -67,6 +69,10 @@ class CurrentView extends JPanel
 	private final JLabel producedValue = new JLabel();
 	private final JLabel producedRateLabel = new JLabel();
 	private final JLabel producedRateValue = new JLabel();
+	private final JLabel actionsLabel = new JLabel();
+	private final JLabel actionsValue = new JLabel();
+	private final JLabel actionsRateLabel = new JLabel();
+	private final JLabel actionsRateValue = new JLabel();
 	private final JLabel retentionLabel = new JLabel();
 	private final JLabel retentionValue = new JLabel();
 	private final JButton pauseResumeButton = smallButton("Pause");
@@ -82,11 +88,12 @@ class CurrentView extends JPanel
 	private final Map<Integer, JLabel> itemLines = new LinkedHashMap<>();
 	private Set<Integer> renderedItemIds = new LinkedHashSet<>();
 
-	CurrentView(SessionManager sessionManager, ItemUseStore itemUseStore, Map<Integer, String> itemNames, Runnable onAction)
+	CurrentView(SessionManager sessionManager, ItemUseStore itemUseStore, Map<Integer, String> itemNames, LiveRates liveRates, Runnable onAction)
 	{
 		this.sessionManager = sessionManager;
 		this.itemUseStore = itemUseStore;
 		this.itemNames = itemNames;
+		this.liveRates = liveRates;
 		this.onAction = onAction;
 
 		setLayout(new BorderLayout());
@@ -173,6 +180,8 @@ class CurrentView extends JPanel
 		// time because the noun depends on the skill ("Logs" vs "Catches").
 		addStatRow(stats, producedLabel, producedValue);
 		addStatRow(stats, producedRateLabel, producedRateValue);
+		addStatRow(stats, actionsLabel, actionsValue);
+		addStatRow(stats, actionsRateLabel, actionsRateValue);
 		addStatRow(stats, retentionLabel, retentionValue);
 
 		itemFlowPanel.setLayout(new BoxLayout(itemFlowPanel, BoxLayout.Y_AXIS));
@@ -266,7 +275,13 @@ class CurrentView extends JPanel
 				activeTimeValue.setText(formatDuration(active));
 				idleTimeValue.setText(formatDuration(idle));
 				xpValue.setText("+" + xp);
-				activeRateValue.setText(formatRate(xp, active));
+				// SPEC.md §5 / §14 [v7]: live rates come from RuneLite's own XP
+				// Tracker rather than being recomputed here. Note these follow
+				// XP Tracker's session, not ours - resetting it mid-session
+				// resets these figures. History is unaffected: completed
+				// sessions still derive their rates from persisted raw data,
+				// which is the only way they stay reproducible (§34).
+				activeRateValue.setText(String.format("%,d", liveRates.getXpPerHour()));
 				overallRateValue.setText(formatRate(xp, total));
 				pauseResumeButton.setText(state == SessionState.ACTIVE ? "Pause" : "Resume");
 
@@ -416,6 +431,23 @@ class CurrentView extends JPanel
 			producedRateValue.setText(activeSeconds > 0
 				? String.format("%,d", Math.round(produced / (double) activeSeconds * 3600))
 				: "0");
+		}
+
+		// Actions come from XP Tracker too, and unlike our item counts they
+		// work for skills that produce nothing at all (Agility laps,
+		// Thieving pickpockets) - previously those had no action figure.
+		int actions = liveRates.getActions();
+		boolean showActions = actions > 0;
+		actionsLabel.setVisible(showActions);
+		actionsValue.setVisible(showActions);
+		actionsRateLabel.setVisible(showActions);
+		actionsRateValue.setVisible(showActions);
+		if (showActions)
+		{
+			actionsLabel.setText("Actions");
+			actionsValue.setText(String.format("%,d", actions));
+			actionsRateLabel.setText("Actions/hr");
+			actionsRateValue.setText(String.format("%,d", liveRates.getActionsPerHour()));
 		}
 
 		double retention = session.getRetentionRate();

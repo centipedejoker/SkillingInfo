@@ -3,6 +3,7 @@ package com.skillinginfo;
 import com.google.inject.Provides;
 import com.skillinginfo.session.ActivitySession;
 import com.skillinginfo.session.ItemFlowEntry;
+import com.skillinginfo.session.LiveRates;
 import com.skillinginfo.session.ItemUseStore;
 import com.skillinginfo.session.SessionManager;
 import com.skillinginfo.session.SessionRepository;
@@ -36,7 +37,10 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.SkillIconManager;
 import net.runelite.client.plugins.Plugin;
+import net.runelite.client.plugins.PluginDependency;
 import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.plugins.xptracker.XpTrackerPlugin;
+import net.runelite.client.plugins.xptracker.XpTrackerService;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
 
@@ -46,6 +50,10 @@ import net.runelite.client.ui.NavigationButton;
 	description = "Tracks personal skilling sessions, XP rates, idle time, activity output, actual pickups, dropped items and resources retained.",
 	tags = {"skilling", "xp", "tracker", "slayer", "loot", "ironman"}
 )
+// Live XP/action rates come from RuneLite's own XP Tracker rather than
+// being recomputed here (SPEC.md §5). That makes XP Tracker a hard
+// dependency, and is why it's declared rather than optional.
+@PluginDependency(XpTrackerPlugin.class)
 public class SkillingInfoPlugin extends Plugin
 {
 	@Inject
@@ -62,6 +70,11 @@ public class SkillingInfoPlugin extends Plugin
 
 	@Inject
 	private ItemManager itemManager;
+
+	@Inject
+	private XpTrackerService xpTrackerService;
+
+	private final LiveRates liveRates = new LiveRates();
 
 	@Inject
 	private ConfigManager configManager;
@@ -93,7 +106,7 @@ public class SkillingInfoPlugin extends Plugin
 		sessionManager.init();
 
 		BufferedImage icon = buildIcon();
-		panel = new SkillingInfoPanel(sessionManager, skillIconManager, itemUseStore, itemNames, icon);
+		panel = new SkillingInfoPanel(sessionManager, skillIconManager, itemUseStore, itemNames, liveRates, icon);
 		panel.refresh();
 
 		navButton = NavigationButton.builder()
@@ -125,6 +138,7 @@ public class SkillingInfoPlugin extends Plugin
 	{
 		sessionManager.onGameTick(client.getTickCount());
 		resolveItemNames();
+		sampleLiveRates();
 		SwingUtilities.invokeLater(() -> panel.refresh());
 	}
 
@@ -148,6 +162,27 @@ public class SkillingInfoPlugin extends Plugin
 		{
 			resolveItemNames(session);
 		}
+	}
+
+	/**
+	 * Samples XP Tracker's figures on the client thread (SPEC.md §5 - reuse
+	 * rather than recompute). Cached into {@link LiveRates} so the Swing
+	 * EDT never calls into another plugin's state directly.
+	 */
+	private void sampleLiveRates()
+	{
+		ActivitySession session = sessionManager.getCurrentSession();
+		if (session == null || session.getSkill() == null)
+		{
+			liveRates.clear();
+			return;
+		}
+
+		net.runelite.api.Skill skill = session.getSkill();
+		liveRates.update(
+			xpTrackerService.getXpHr(skill),
+			xpTrackerService.getActions(skill),
+			xpTrackerService.getActionsHr(skill));
 	}
 
 	private void resolveItemNames(ActivitySession session)
