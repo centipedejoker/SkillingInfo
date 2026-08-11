@@ -51,5 +51,12 @@ tasks.register('run', JavaExec) {
 	mainClass = pluginMainClass
 
 	jvmArgs "-ea"
+	// RuneLite's OSXFullScreenAdapter uses com.apple.eawt directly, which
+	// JDK 17's module system doesn't export by default - without this,
+	// ClientUI.init() throws IllegalAccessError and the client never opens
+	// (macOS only; harmless on Windows/Linux, kept unconditional for
+	// simplicity since JavaExec ignores unrecognised --add-exports targets
+	// on other platforms).
+	jvmArgs "--add-exports=java.desktop/com.apple.eawt=ALL-UNNAMED"
 	args "--developer-mode", "--debug"
 }
