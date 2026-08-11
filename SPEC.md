@@ -1073,7 +1073,7 @@ Recommended: "Tracks personal skilling sessions, XP rates, idle time, activity o
 
 `[v7]` **UI simplified to net-only, one line per item** (§65), in both `CurrentView` and `HistoryView`: nobody needs the generated/dropped breakdown at a glance, only what they ended up with, and the multi-stat two-line version was overflowing the sidebar's width. Full breakdown remains backlog for the expandable detail view already logged in §65.
 
-**Phase 4** ✅ — bank correlation (§25a) and confirmed banked output ✅ **live-validated**; banked/future XP (§33) implemented, pending live validation.
+**Phase 4** ✅ **live-validated** — bank correlation (§25a), confirmed banked output, and future XP (§33) with per-item in-panel product selection all confirmed working in real gameplay.
 
 `[v7]` Implementation notes:
 - **`BankCorrelator` owns the single bank snapshot** (§26) and implements §25a's three-way minimum verbatim: `min(bankDelta, invDelta, sessionOutstanding)`. Because it's the spec's most safety-critical mechanism and is pure logic, it's covered by real unit tests (`BankCorrelatorTest`, 9 cases drawn from §55's list) rather than live play-testing alone — including §27's worked example, withdraw-then-redeposit inertness, Deposit-All independence, and the first-open baseline case.
