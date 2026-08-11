@@ -2,7 +2,7 @@
 
 RuneLite Personal Activity, Item-Flow & Account-Gain Analytics
 
-**Document status:** v5 — Reviewed, hardened, prior-art-checked, scope-decided & deployment-ready implementation specification (2026-08-11)
+**Document status:** v6 — Reviewed, hardened, prior-art-checked, scope-decided, deployment-ready & first-playtested implementation specification (2026-08-11)
 **Target:** RuneLite Plugin Hub
 **Primary goal:** Measure how the player actually performs OSRS activities and what their account actually gains from each session
 **Secondary goal:** Produce structured local historical data for external analysis
@@ -18,6 +18,8 @@ RuneLite Personal Activity, Item-Flow & Account-Gain Analytics
 > **Changelog from v3:** Six open decisions resolved. (1) §9's reward-burst filter had a logic bug that would have blocked all combat/Slayer detection — every hit awards Hitpoints XP alongside combat-style XP in the same tick, which the old rule read as a multi-skill reward burst. Fixed via a new **tracking-group** concept (§7a). (2) Combat scope is Slayer-task-only, not general PvM — codified in new §1a, enforced mechanically by §7a rather than left as a stated intention. (3) Genuine multi-skill session tracking (not a simplified single-skill shortcut) is built now, not deferred — §7a, plus matching changes in `SessionManager`/`ActivitySession`/`TrackingGroups`. (4) The idle-reset signal is broadened beyond XP to item-flow events (§13). (5) Future XP will use a small hardcoded item→XP table built alongside Phase 4, not a dependency on `banked-experience` or an indefinite deferral (§33). (6) Unclassified inventory movements are confirmed to stay invisible to the user, not surfaced even as a count (§50). Sections 1a (new), 7, 7a (new), 9, 13, 33, 37, 44, 50 updated, marked `[v4]`.
 >
 > **Changelog from v4:** New §65 (UI/UX Lock-Down) and §66 (Deployment Artifacts), verified directly against RuneLite's plugin submission docs rather than assumed. `LICENSE` (BSD 2-Clause) and `runelite-plugin.properties`'s missing `build`/`version` fields added to the scaffold; two still-open gaps (a real repo-root `icon.png` and finalized visual mockups) are called out explicitly rather than left implicit.
+>
+> **Changelog from v5:** First live playtest — the scaffold actually built and ran (Gradle wrapper generated, JDK/module fixes applied, `startUp()` confirmed clean with zero exceptions), surfacing the first real UX feedback rather than a hypothetical one. The plain Current/History text-tab switch is replaced with a skill-icon toggle row (§65), built on RuneLite core's own `SkillIconManager` and the small-font convention (`FontManager.getRunescapeSmallFont()`) taken directly from XP Tracker's source — both verified against runelite/runelite, not assumed. §61's Phase 1 checklist item for the sidebar is now implemented against real feedback instead of the original ASCII mockup guess.
 
 ---
 
@@ -811,9 +813,11 @@ Activity modules may expose:
 **Mahogany Homes** — contracts, contracts/hr
 **Slayer** — kills, KPH, loot picked up, loot banked, loadout
 
-## 41. SIDEBAR
+## 41. SIDEBAR `[v6]`
 
 Primary views: `CURRENT`, `HISTORY`. Future: `ACTIVITIES`.
+
+`[v6]` Superseded by §65's skill-icon toggle row — reached via a persistent "current" icon plus one icon per skill in history, not a two-button text tab switch. `ACTIVITIES` isn't a separate future view under this model; a per-activity breakdown (Phase 5) is a natural extension of the existing per-skill filter rather than a third navigation mode.
 
 ## 42. CURRENT PANEL
 
@@ -1095,6 +1099,8 @@ What RuneLite actually restricts, versus what's just our own discipline to nail 
 
 - **No overlay in v0.1 — sidebar-only, decided.** Bossing Info-style plugins commonly ship one (in-game KPH/session infobox), but keeping v0.1 sidebar-only avoids extra `Overlay`/`OverlayManager` surface area before the core item-flow engine (Phases 2–4) is proven. Revisit once that's solid.
 - **The ASCII mockups in this spec are wireframes, not a locked design.** Before Phase 5 (activity modules) starts adding per-activity panel variants, the UI states already implied — idle, prompted, active/paused session, history list, session detail — should be finalized as an explicit state-by-state spec (exact copy, exact field order, exact truncation/overflow behaviour for long activity names) so implementation doesn't thrash. The current scaffold's `CurrentView`/`HistoryView` already implement the idle/prompt/active states from §6/§11; history's detail view (§29's item-flow breakdown) doesn't exist yet and is the next one worth locking down before Phase 2 needs it.
+
+**`[v6]` Navigation decided from live playtest feedback, not a mockup.** §41's "Primary views: CURRENT, HISTORY" is superseded — a plain text-button tab switch tested as too text-heavy and hid history behind an unlabelled second tab. Replaced with a skill-icon toggle row: a persistent "current session" icon plus one small icon per skill that has history, built on RuneLite core's `SkillIconManager.getSkillImage(Skill, boolean small)` (the same API `XpInfoBox` and `CompactBoostsOverlay` use). Clicking a skill icon filters `HistoryView` to that skill only, rather than one mixed chronological list — a direct, deliberate departure from Bossing Info's model of one boss's stats at a time reached through an unclear caret. All labels/buttons across `CurrentView`/`HistoryView` now use `FontManager.getRunescapeSmallFont()` — the earlier scaffold never set an explicit font and fell back to the oversized OS default, which is what actually prompted this pass (default-Swing-font text at native size reads as "massive" in a fixed ~225px sidebar next to RuneLite's own compact chrome).
 
 ## 66. DEPLOYMENT ARTIFACTS `[v5]`
 

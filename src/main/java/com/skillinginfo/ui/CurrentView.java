@@ -21,13 +21,15 @@ import net.runelite.client.ui.FontManager;
 /**
  * Renders the CURRENT tab's three states: idle (waiting for candidate
  * detection), prompted (Start/Ignore), and an active/paused session
- * (SPEC.md §6, §11).
+ * (SPEC.md §6, §11). All text uses RuneLite's small UI font (§65) - a
+ * ~225px sidebar has no room for default Swing/OS font sizes.
  */
 class CurrentView extends JPanel
 {
 	private static final String IDLE_CARD = "IDLE";
 	private static final String PROMPT_CARD = "PROMPT";
 	private static final String SESSION_CARD = "SESSION";
+	private static final int BUTTON_HEIGHT = 24;
 
 	private final SessionManager sessionManager;
 	private final Runnable onAction;
@@ -46,7 +48,7 @@ class CurrentView extends JPanel
 	private final JLabel xpValue = new JLabel();
 	private final JLabel activeRateValue = new JLabel();
 	private final JLabel overallRateValue = new JLabel();
-	private final JButton pauseResumeButton = new JButton("Pause");
+	private final JButton pauseResumeButton = smallButton("Pause");
 
 	CurrentView(SessionManager sessionManager, Runnable onAction)
 	{
@@ -60,10 +62,20 @@ class CurrentView extends JPanel
 		add(cards, BorderLayout.CENTER);
 	}
 
+	private static JButton smallButton(String text)
+	{
+		JButton button = new JButton(text);
+		button.setFont(FontManager.getRunescapeSmallFont());
+		button.setPreferredSize(new Dimension(0, BUTTON_HEIGHT));
+		button.setMargin(new java.awt.Insets(0, 2, 0, 2));
+		return button;
+	}
+
 	private JPanel buildIdleCard()
 	{
 		JPanel panel = new JPanel(new BorderLayout());
 		JLabel label = new JLabel("<html><center>No activity detected.<br/>Keep playing - Skilling Info will<br/>prompt you when it recognises<br/>a repeated activity.</center></html>", SwingConstants.CENTER);
+		label.setFont(FontManager.getRunescapeSmallFont());
 		label.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 		panel.add(label, BorderLayout.CENTER);
 		return panel;
@@ -77,11 +89,12 @@ class CurrentView extends JPanel
 
 		promptTitle.setFont(FontManager.getRunescapeBoldFont());
 		promptTitle.setAlignmentX(CENTER_ALIGNMENT);
+		promptBody.setFont(FontManager.getRunescapeSmallFont());
 		promptBody.setAlignmentX(CENTER_ALIGNMENT);
 		promptBody.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 
-		JButton startButton = new JButton("Start");
-		JButton ignoreButton = new JButton("Ignore");
+		JButton startButton = smallButton("Start");
+		JButton ignoreButton = smallButton("Ignore");
 		startButton.addActionListener(e -> {
 			sessionManager.start();
 			onAction.run();
@@ -111,6 +124,7 @@ class CurrentView extends JPanel
 		panel.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
 		skillLabel.setFont(FontManager.getRunescapeBoldFont());
+		activityLabel.setFont(FontManager.getRunescapeSmallFont());
 		activityLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 
 		JPanel stats = new JPanel(new GridLayout(0, 2, 4, 2));
@@ -134,7 +148,7 @@ class CurrentView extends JPanel
 			onAction.run();
 		});
 
-		JButton stopButton = new JButton("Stop Session");
+		JButton stopButton = smallButton("Stop Session");
 		stopButton.addActionListener(e -> {
 			sessionManager.stop();
 			onAction.run();
@@ -155,7 +169,9 @@ class CurrentView extends JPanel
 	private void addStatRow(JPanel stats, String label, JLabel value)
 	{
 		JLabel labelComponent = new JLabel(label);
+		labelComponent.setFont(FontManager.getRunescapeSmallFont());
 		labelComponent.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+		value.setFont(FontManager.getRunescapeSmallFont());
 		value.setHorizontalAlignment(SwingConstants.RIGHT);
 		stats.add(labelComponent);
 		stats.add(value);

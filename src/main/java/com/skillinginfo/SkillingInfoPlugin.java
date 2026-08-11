@@ -19,6 +19,7 @@ import net.runelite.api.events.GameTick;
 import net.runelite.api.events.StatChanged;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.game.SkillIconManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
@@ -41,6 +42,9 @@ public class SkillingInfoPlugin extends Plugin
 	@Inject
 	private SkillingInfoConfig config;
 
+	@Inject
+	private SkillIconManager skillIconManager;
+
 	private SessionRepository sessionRepository;
 	private SessionManager sessionManager;
 	private SkillingInfoPanel panel;
@@ -59,12 +63,13 @@ public class SkillingInfoPlugin extends Plugin
 		sessionManager = new SessionManager(config, sessionRepository);
 		sessionManager.init();
 
-		panel = new SkillingInfoPanel(sessionManager);
+		BufferedImage icon = buildIcon();
+		panel = new SkillingInfoPanel(sessionManager, skillIconManager, icon);
 		panel.refresh();
 
 		navButton = NavigationButton.builder()
 			.tooltip("Skilling Info")
-			.icon(buildIcon())
+			.icon(icon)
 			.priority(6)
 			.panel(panel)
 			.build();
