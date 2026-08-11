@@ -106,13 +106,13 @@ class HistoryView extends JPanel
 
 		for (ItemFlowEntry entry : session.getItemFlow())
 		{
-			if (entry.getGenerated() <= 0)
+			if (entry.getDirectlyAcquired() <= 0)
 			{
 				continue;
 			}
 			String name = itemNames.getOrDefault(entry.getItemId(), "Item #" + entry.getItemId());
-			JLabel itemLine = new JLabel(String.format("%s: Gen %,d · Dropped %,d · Net %,d",
-				name, entry.getGenerated(), entry.getDropped(), entry.getNetRetained()));
+			JLabel itemLine = new JLabel(String.format("%s: Acquired %,d · Dropped %,d · Net %,d",
+				name, entry.getDirectlyAcquired(), entry.getDropped(), entry.getNetRetained()));
 			itemLine.setFont(FontManager.getRunescapeSmallFont());
 			itemLine.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 			row.add(itemLine);

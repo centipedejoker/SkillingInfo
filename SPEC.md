@@ -1060,7 +1060,14 @@ Recommended: "Tracks personal skilling sessions, XP rates, idle time, activity o
 - **No retroactive item-flow buffering.** §6/§10 allow "buffered output events where safe" from the candidate window, but Phase 2 only tracks item flow from the moment a session formally starts — buffering items in parallel with the XP candidate buffer is deferred as unnecessary complexity for now.
 - Not yet done: the reconciliation invariant (§52) and unclassified-movement handling (§50 [v4]) have nothing to validate against until Phase 3/4 add pickup and bank correlation — Phase 2's `OTHER_INVENTORY_GAIN`/`OTHER_INVENTORY_LOSS` paths are effectively unreachable until then, which is expected, not a gap.
 
-**Phase 3** — ground-item tracker; confirmed pickup correlation (§20a); repickup handling.
+**Phase 3** ✅ — ground-item tracker; confirmed pickup correlation (§20a); repickup handling.
+
+`[v7]` Implementation notes and simplifications, mirroring Phase 2's pattern:
+- **`GroundItemTracker`** is built against real events (`ItemSpawned`/`ItemDespawned`/`ItemQuantityChanged`, keyed by tile+itemId) even though `PickupCorrelator` doesn't consume it yet — it exists now for §20b's ownership-based attribution confidence (`TileItem.getOwnership()`), which only becomes relevant once Phase 6 introduces multi-source combat loot. Known limitation: two players' distinct private drops of the same item on the same tile collapse to one tracked entry — acceptable, since §20b already prefers session-aggregate attribution over false precision in exactly that situation.
+- **`PickupCorrelator`** correlates a "Take" click against the resulting inventory increase only, the same simplification Phase 2 made for drops — §20a's full model (also confirming the ground quantity decreased at that tile) is deferred.
+- **Pickup vs. direct-acquisition conflict, resolved by priority.** A confirmed pickup and the direct-acquisition window heuristic (§16 [v7 fix]) can both be looking at the same inventory increase in the same tick (e.g. looting right after a Slayer kill lands XP). Pickups resolve first and are subtracted out of the increase pool before the generation heuristic runs, so the same item quantity is never credited to both channels.
+- **Repickup (§22)** is pure session-side bookkeeping, no ground-tracker cross-reference needed: a confirmed pickup first pays down `dropped − repicked` (however much of that item is still "dropped this session, not yet repicked") before any remainder counts as a new pickup. `ItemFlowEntry.directlyAcquired` — and therefore `netRetained` — now aggregates both acquisition channels (generated and picked up), not just direct output; this also fixed a latent gap where a pickup-only item (no matching same-tick XP) wouldn't have shown up in the UI at all under Phase 2's `generated`-gated display.
+- Not backfilled retroactively: pickups during the pre-Start candidate window (unlike generation, which is per the v7 fix above) — a lower-value edge case, deferred.
 
 **Phase 4** — bank correlation (§25a); confirmed banked output; banked/future XP.
 

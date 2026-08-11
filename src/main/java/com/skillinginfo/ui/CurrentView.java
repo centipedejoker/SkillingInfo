@@ -241,16 +241,18 @@ class CurrentView extends JPanel
 	}
 
 	/**
-	 * SPEC.md §11/§29 OUTPUT section - one compact row per item generated
-	 * this session. Phase 2 only has generated/dropped/net retained;
-	 * banked/future XP light up in later phases.
+	 * SPEC.md §11/§29 OUTPUT section - one compact row per item acquired
+	 * this session, from either channel (direct skilling output or ground
+	 * pickup - §20a). Gated on directlyAcquired, not generated, so a
+	 * pickup-only item (no matching same-tick XP) still shows up. Banked/
+	 * future XP light up once Phase 4's bank correlator exists.
 	 */
 	private void refreshItemFlow(Collection<ItemFlowEntry> entries)
 	{
 		itemFlowPanel.removeAll();
 		for (ItemFlowEntry entry : entries)
 		{
-			if (entry.getGenerated() <= 0)
+			if (entry.getDirectlyAcquired() <= 0)
 			{
 				continue;
 			}
@@ -259,8 +261,8 @@ class CurrentView extends JPanel
 			JLabel title = new JLabel(name);
 			title.setFont(FontManager.getRunescapeSmallFont());
 
-			JLabel detail = new JLabel(String.format("Gen %,d  ·  Dropped %,d  ·  Net %,d",
-				entry.getGenerated(), entry.getDropped(), entry.getNetRetained()));
+			JLabel detail = new JLabel(String.format("Acquired %,d  ·  Dropped %,d  ·  Net %,d",
+				entry.getDirectlyAcquired(), entry.getDropped(), entry.getNetRetained()));
 			detail.setFont(FontManager.getRunescapeSmallFont());
 			detail.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 

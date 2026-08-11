@@ -18,9 +18,15 @@ import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
+import net.runelite.api.MenuAction;
+import net.runelite.api.TileItem;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.ItemContainerChanged;
+import net.runelite.api.events.ItemDespawned;
+import net.runelite.api.events.ItemQuantityChanged;
+import net.runelite.api.events.ItemSpawned;
 import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.gameval.InventoryID;
@@ -161,7 +167,40 @@ public class SkillingInfoPlugin extends Plugin
 		if ("Drop".equals(event.getMenuOption()))
 		{
 			sessionManager.onDropClicked(event.getItemId());
+			return;
 		}
+
+		MenuAction action = event.getMenuAction();
+		boolean isGroundItemAction = action == MenuAction.GROUND_ITEM_FIRST_OPTION
+			|| action == MenuAction.GROUND_ITEM_SECOND_OPTION
+			|| action == MenuAction.GROUND_ITEM_THIRD_OPTION
+			|| action == MenuAction.GROUND_ITEM_FOURTH_OPTION
+			|| action == MenuAction.GROUND_ITEM_FIFTH_OPTION;
+		if (isGroundItemAction && "Take".equals(event.getMenuOption()))
+		{
+			sessionManager.onTakeClicked(event.getId());
+		}
+	}
+
+	@Subscribe
+	public void onItemSpawned(ItemSpawned event)
+	{
+		WorldPoint point = event.getTile().getWorldLocation();
+		sessionManager.onGroundItemSpawned(point, event.getItem());
+	}
+
+	@Subscribe
+	public void onItemQuantityChanged(ItemQuantityChanged event)
+	{
+		WorldPoint point = event.getTile().getWorldLocation();
+		sessionManager.onGroundItemQuantityChanged(point, event.getItem());
+	}
+
+	@Subscribe
+	public void onItemDespawned(ItemDespawned event)
+	{
+		WorldPoint point = event.getTile().getWorldLocation();
+		sessionManager.onGroundItemDespawned(point, event.getItem());
 	}
 
 	@Subscribe

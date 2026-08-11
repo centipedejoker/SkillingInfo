@@ -14,6 +14,8 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Item;
 import net.runelite.api.Skill;
+import net.runelite.api.TileItem;
+import net.runelite.api.coords.WorldPoint;
 
 /**
  * Orchestrates the session state machine (SPEC.md §7 [v2]) with multi-skill
@@ -37,6 +39,8 @@ public class SessionManager
 	private final SessionClock clock = new SessionClock();
 	private final InventoryDeltaTracker inventoryDeltaTracker = new InventoryDeltaTracker();
 	private final DropCorrelator dropCorrelator = new DropCorrelator();
+	private final GroundItemTracker groundItemTracker = new GroundItemTracker();
+	private final PickupCorrelator pickupCorrelator = new PickupCorrelator();
 
 	private final Map<Skill, CandidateBuffer> buffers = new EnumMap<>(Skill.class);
 	private final Map<Skill, Integer> pendingTickDeltas = new EnumMap<>(Skill.class);
@@ -129,6 +133,34 @@ public class SessionManager
 		{
 			dropCorrelator.onDropClicked(itemId, currentTick);
 		}
+	}
+
+	/**
+	 * SPEC.md §20a: records a ground-item "Take" click as a pending
+	 * correlation. No-op unless a session is actually running.
+	 */
+	public void onTakeClicked(int itemId)
+	{
+		if (state == SessionState.ACTIVE || state == SessionState.PAUSED)
+		{
+			pickupCorrelator.onTakeClicked(itemId, currentTick);
+		}
+	}
+
+	/** SPEC.md §48: feeds live ground-item state into {@link GroundItemTracker}. */
+	public void onGroundItemSpawned(WorldPoint point, TileItem item)
+	{
+		groundItemTracker.onItemSpawned(point, item);
+	}
+
+	public void onGroundItemQuantityChanged(WorldPoint point, TileItem item)
+	{
+		groundItemTracker.onItemQuantityChanged(point, item);
+	}
+
+	public void onGroundItemDespawned(WorldPoint point, TileItem item)
+	{
+		groundItemTracker.onItemDespawned(point, item);
 	}
 
 	/**
@@ -235,11 +267,15 @@ public class SessionManager
 
 	/**
 	 * SPEC.md §16: correlates this tick's inventory deltas against the
-	 * current session. Generation is attributed only within a small window
-	 * of ticks after XP was last credited to the session (§16 [v7 fix]) -
-	 * inventory gained well outside that window (e.g. picking something up
-	 * off the ground) isn't "generated" in Phase 2's sense; ground pickup
-	 * gets its own correlator in Phase 3.
+	 * current session. Confirmed pickups (§20a) are resolved first and
+	 * removed from the increase pool, so the same inventory increase can
+	 * never be double-counted as both a pickup and direct acquisition -
+	 * a real risk since a Take click and a fresh qualifying XP event can
+	 * land close together (e.g. looting right after a Slayer kill).
+	 * Whatever's left is attributed as direct acquisition only within a
+	 * small window of ticks after XP was last credited (§16 [v7 fix]) -
+	 * inventory gained well outside that window isn't "generated" in
+	 * Phase 2/3's sense.
 	 */
 	private void creditItemFlow()
 	{
@@ -265,10 +301,26 @@ public class SessionManager
 			return;
 		}
 
+		Map<Integer, Integer> confirmedPickups = pickupCorrelator.resolve(currentTick, increased);
+		for (Map.Entry<Integer, Integer> entry : confirmedPickups.entrySet())
+		{
+			increased.merge(entry.getKey(), -entry.getValue(), Integer::sum);
+			creditPickup(entry.getKey(), entry.getValue());
+		}
+		if (!confirmedPickups.isEmpty())
+		{
+			// SPEC.md §13 [v4]: a pickup is deliberate activity, not idle time
+			recordNonXpActivity();
+		}
+
 		if (currentTick - lastXpCreditTick <= GENERATION_WINDOW_TICKS)
 		{
 			for (Map.Entry<Integer, Integer> entry : increased.entrySet())
 			{
+				if (entry.getValue() <= 0)
+				{
+					continue;
+				}
 				log.debug("Crediting generated: itemId={} qty={}", entry.getKey(), entry.getValue());
 				currentSession.addGenerated(entry.getKey(), entry.getValue());
 			}
@@ -283,6 +335,28 @@ public class SessionManager
 		{
 			// SPEC.md §13 [v4]: a drop is deliberate activity, not idle time
 			recordNonXpActivity();
+		}
+	}
+
+	/**
+	 * SPEC.md §22: a confirmed pickup first pays down however much of this
+	 * item is still "dropped this session but not yet repicked" - that
+	 * portion is a repickup correction, not a new net gain. Only the
+	 * remainder (if any) is a genuinely new pickup.
+	 */
+	private void creditPickup(int itemId, int qty)
+	{
+		int outstanding = currentSession.getOutstandingDropped(itemId);
+		int repickAmount = Math.min(qty, outstanding);
+		int newAmount = qty - repickAmount;
+
+		if (repickAmount > 0)
+		{
+			currentSession.addRepicked(itemId, repickAmount);
+		}
+		if (newAmount > 0)
+		{
+			currentSession.addPickedUp(itemId, newAmount);
 		}
 	}
 
@@ -461,6 +535,7 @@ public class SessionManager
 		clock.reset();
 		inventoryDeltaTracker.reset();
 		dropCorrelator.reset();
+		pickupCorrelator.reset();
 		lastQualifyingTick = currentTick;
 		lastXpCreditTick = currentTick;
 
@@ -523,6 +598,7 @@ public class SessionManager
 		clock.reset();
 		inventoryDeltaTracker.reset();
 		dropCorrelator.reset();
+		pickupCorrelator.reset();
 		state = SessionState.IDLE;
 	}
 }

@@ -83,6 +83,31 @@ public class ActivitySession
 		itemFlow.computeIfAbsent(itemId, ItemFlowEntry::new).addDropped(qty);
 	}
 
+	public void addPickedUp(int itemId, int qty)
+	{
+		if (qty <= 0)
+		{
+			return;
+		}
+		itemFlow.computeIfAbsent(itemId, ItemFlowEntry::new).addPickedUp(qty);
+	}
+
+	public void addRepicked(int itemId, int qty)
+	{
+		if (qty <= 0)
+		{
+			return;
+		}
+		itemFlow.computeIfAbsent(itemId, ItemFlowEntry::new).addRepicked(qty);
+	}
+
+	/** SPEC.md §22: how much of this item is still "dropped but not yet repicked" - the repickup offset. */
+	public int getOutstandingDropped(int itemId)
+	{
+		ItemFlowEntry entry = itemFlow.get(itemId);
+		return entry == null ? 0 : Math.max(0, entry.getDropped() - entry.getRepicked());
+	}
+
 	public Collection<ItemFlowEntry> getItemFlow()
 	{
 		return itemFlow.values();
