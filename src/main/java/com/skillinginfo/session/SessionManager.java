@@ -192,12 +192,21 @@ public class SessionManager
 	 * <p>
 	 * A rise in the remaining count means a new task was assigned, so the
 	 * baseline resets rather than recording a negative.
+	 * <p>
+	 * `[v8]` Counts while PAUSED as well as ACTIVE, like every other piece of
+	 * activity evidence (§13 [v4]), and resumes the session the same way loot,
+	 * pickups, drops and banking already do - a kill is the strongest possible
+	 * signal that a combat session is still in progress. Previously this was
+	 * the one signal that discarded its evidence <em>and</em> advanced the
+	 * baseline past it, so a kill during a pause was lost outright rather than
+	 * deferred, while loot from that very same kill was credited and did
+	 * resume the session.
 	 */
 	public void onSlayerTaskUpdate(String task, String location, int remainingAmount)
 	{
 		slayerTaskVisible = task != null && !task.isEmpty();
 
-		if (state != SessionState.ACTIVE || currentSession == null
+		if ((state != SessionState.ACTIVE && state != SessionState.PAUSED) || currentSession == null
 			|| !TrackingGroups.isCombatGroup(currentSession.getSkill()))
 		{
 			lastRemainingAmount = remainingAmount;

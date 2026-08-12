@@ -9,7 +9,7 @@ that already cost real time once.
 
 ## 1. Where it stands
 
-A working RuneLite plugin: 32 source files, 69 passing tests, 45 commits.
+A working RuneLite plugin: 32 source files, 75 passing tests, 46 commits.
 Every phase in `SPEC.md` §61 is built, and everything except parts of Phase 5
 has been validated in live gameplay by the owner.
 
@@ -128,11 +128,20 @@ minimum and withdrawals weren't, so withdrawing 27 raw sharks was recorded
 as catching them. Drain on one path only and the leftovers don't just leak,
 they later cancel a real movement of the same item.
 
+**A branch that declines to record something must not also consume the
+evidence.** Kill counting ran only while ACTIVE, and the paused branch
+advanced the task baseline past the kill on its way out — so the kill was
+lost rather than deferred, silently and cumulatively. Discarding and
+advancing look identical while a session is running and diverge completely
+the moment it isn't. Kills now count while PAUSED and resume the session,
+like every other piece of activity evidence (§13 `[v4]`, §37 `[v8]`).
+
 **Test this layer by driving ticks, not by calling the model.** Every test
-before v8 poked `ActivitySession` directly, and the three bugs above all
-needed two containers moving in the same tick to appear — so 62 green tests
-said nothing about them. `SessionManagerItemFlowTest` shows the harness;
-it's about 40 lines and needs no mocking framework.
+before v8 poked `ActivitySession` directly, and the bugs above all needed
+two containers moving in the same tick, or a session sitting in a particular
+state when an event arrived — so 62 green tests said nothing about them.
+`SessionManagerHarness` is the scaffolding; it's about 40 lines and needs no
+mocking framework.
 
 ---
 

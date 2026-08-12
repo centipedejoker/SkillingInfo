@@ -1,12 +1,12 @@
 package com.skillinginfo.session;
 
-import com.skillinginfo.SkillingInfoConfig;
-import java.util.ArrayList;
-import java.util.List;
-import net.runelite.api.Item;
 import net.runelite.api.Skill;
 import net.runelite.api.gameval.ItemID;
 import org.junit.Test;
+import static com.skillinginfo.session.SessionManagerHarness.STARTED_TICK;
+import static com.skillinginfo.session.SessionManagerHarness.entry;
+import static com.skillinginfo.session.SessionManagerHarness.items;
+import static com.skillinginfo.session.SessionManagerHarness.startedSession;
 import static org.junit.Assert.assertEquals;
 
 /**
@@ -31,83 +31,6 @@ public class SessionManagerItemFlowTest
 	private static final int GLORY = ItemID.AMULET_OF_GLORY;
 	private static final int LOGS = ItemID.LOGS;
 	private static final int RAW_SHARK = ItemID.RAW_SHARK;
-
-	/** The tick the helper below leaves a started session sitting on. */
-	private static final int STARTED_TICK = 5;
-
-	private static SessionManager manager()
-	{
-		SkillingInfoConfig config = new SkillingInfoConfig()
-		{
-		};
-		SessionRepository repository = new SessionRepository(null)
-		{
-			@Override
-			public void append(ActivitySession session)
-			{
-			}
-
-			@Override
-			public List<ActivitySession> loadAll()
-			{
-				return new ArrayList<>();
-			}
-		};
-		// ItemUseStore's ConfigManager is only touched when a session is
-		// finalised, which none of these tests do
-		return new SessionManager(config, repository, new ItemUseStore(null));
-	}
-
-	private static Item[] items(int... idQtyPairs)
-	{
-		Item[] result = new Item[idQtyPairs.length / 2];
-		for (int i = 0; i < result.length; i++)
-		{
-			result[i] = new Item(idQtyPairs[i * 2], idQtyPairs[i * 2 + 1]);
-		}
-		return result;
-	}
-
-	/**
-	 * Seeds all three container baselines, then drives detection to a prompt
-	 * and starts the session. Leaves it ACTIVE at {@link #STARTED_TICK} with
-	 * XP credited on that tick, so the caller opens on an XP window that is
-	 * still inside {@code GENERATION_WINDOW_TICKS}.
-	 */
-	private static SessionManager startedSession(Skill skill, Item[] inventory, Item[] worn, Item[] bank)
-	{
-		SessionManager m = manager();
-		m.onInventoryChanged(inventory);
-		m.onEquipmentChanged(worn);
-		m.onBankChanged(bank);
-		m.onStatChanged(skill, 0); // first observation is the sync, not a gain
-		m.onGameTick(0);           // discards the seeding deltas while IDLE
-
-		m.onStatChanged(skill, 100);
-		m.onGameTick(1);
-		m.onStatChanged(skill, 200);
-		m.onGameTick(3);
-		m.onStatChanged(skill, 300);
-		m.onGameTick(STARTED_TICK);
-
-		assertEquals("three drops spanning four ticks should reach the gate",
-			SessionState.PROMPTED, m.getState());
-		m.start();
-		assertEquals(SessionState.ACTIVE, m.getState());
-		return m;
-	}
-
-	private static ItemFlowEntry entry(SessionManager m, int itemId)
-	{
-		for (ItemFlowEntry candidate : m.getCurrentSession().getItemFlow())
-		{
-			if (candidate.getItemId() == itemId)
-			{
-				return candidate;
-			}
-		}
-		return null;
-	}
 
 	private static int generated(SessionManager m, int itemId)
 	{

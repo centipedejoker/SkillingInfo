@@ -833,6 +833,10 @@ Initial loadout
 
 `[v4]` This model only exists at all because a Slayer task is active — §1a scopes combat sessions to Slayer-task combat, mechanically enforced by §7a's Slayer-XP-presence gate. Plain bossing without a task never reaches this screen.
 
+**`[v8]` Kills count while PAUSED, and resume the session.** Kill counting was the one signal that only ran while ACTIVE — every other piece of activity evidence (loot, pickups, drops, banking) already counted in both states and resumed the session via §13 `[v4]`'s broadened idle signal. Worse, the paused path *advanced the baseline* past the kill instead of leaving it pending, so the count was lost outright rather than deferred — while loot from the very same kill was credited and did resume the session. A kill is the strongest possible evidence that a combat session is in progress, so it now behaves like the rest.
+
+The general form is worth stating, because §13 `[v4]` only half-landed the first time: **whenever a signal is gated on session state, the branch that declines to record it must not also consume the evidence.** Discarding and advancing look identical while a session is running and diverge completely the moment it isn't.
+
 ## 38. STARTING INVENTORY / EQUIPMENT
 
 For Slayer and selected activities, capture starting inventory and starting equipment at the first meaningful activity point. Do not continuously snapshot unless required for a specific feature.
