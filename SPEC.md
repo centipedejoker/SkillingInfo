@@ -459,6 +459,16 @@ This makes the recipe table described below **unnecessary for correct accounting
 
 Known limitation, accepted: moving items into a container that isn't the bank — a looting bag, POH storage — reads as consumption. That undercounts retention rather than inventing gain, which is the side §27 says to err on.
 
+**`[v8]` Container transfers are claimed in both directions, for both containers.** The v7 rule above was written from the decrease side only, and the increase side had no equivalent. Three defects followed from that asymmetry, all found by driving `SessionManager` through real tick sequences rather than by reading it:
+
+- **Unequipping was booked as skilling output.** The wield case (inventory decrease matched by an equipment increase) was handled; the mirror was not, so taking a glory off mid-chop was an unexplained inventory increase inside the XP window and §16's catch-all credited it as a log.
+- **Bank withdrawals were booked as skilling output** — see §25a step 6 `[v8]`. Worst for the bank-adjacent skills, where a withdrawal can easily land within two ticks of the last XP.
+- **Equipment increases were drained on only one code path.** `creditConsumption` returned early when outside the XP window *before* consuming the equipment pool, so an equip made at any point outside a window sat there indefinitely and silently cancelled the next consumption of that item.
+
+The generalisation, which is the part worth keeping: **the catch-all rules at the end of the pipeline accept anything unexplained, so every pool feeding them must be drained unconditionally and claimed against in a fixed order** — container transfers first (a second container moving the item is stronger evidence than a menu click, which only says what the player *asked* for), then click-gated pickups and drops, then bank deposits, then the catch-alls. A pool emptied on only one path doesn't just leak; its stale contents later cancel a real, unrelated movement of the same item.
+
+Claiming is quantity-aware and entries are removed once spent, so a tick that both withdraws 27 logs and cuts one records exactly one log generated. Same-tick alignment of the two containers' events is assumed throughout, as it already is for deposits (§25a step 3).
+
 **`[v2]` `ITEM_TRANSFORMED` was missing** despite §54 requiring that item transformation (e.g. raw fish → cooked fish, logs → planks) not be misclassified as a drop-and-acquire pair. Populate it only from a static known-recipe table (cooking, fletching, smithing, herblore, etc., sourced from existing RuneLite plugin data where available): if itemId A decreases and itemId B increases in the same tick and (A→B) is a known recipe pair, emit `ITEM_TRANSFORMED` and exclude both sides from drop/acquire counting. Unmapped pairs are left as `OTHER_INVENTORY_LOSS` / `OTHER_INVENTORY_GAIN` rather than guessed.
 
 Each event contains, where available: `timestamp`, `itemId`, `quantity`, `source`, `confidence`, `activitySessionId`.
@@ -624,6 +634,8 @@ The original rule described the desired signal but not a computable procedure, a
 4. Attribute `candidateBanked[itemId] = min(bankDelta[itemId], invDelta[itemId], sessionOutstanding[itemId])`. This three-way minimum is the core safeguard: it caps attribution at what the session actually holds outstanding, and refuses to attribute a bank increase unless it is backed by a same-tick inventory decrease — ruling out coincidental deposits of pre-existing bank stock or unrelated bank activity.
 5. Mark `candidateBanked` as `ITEM_BANKED` with `CONFIRMED` and decrement `sessionOutstanding` accordingly. Any leftover `bankDelta` (no matching outstanding balance, or no matching inventory decrease) is left unattributed — never recorded as session output. This is what makes §27's worked example (Death rune/Coal not attributed) a guaranteed outcome of the algorithm, not just a stated intention.
 6. Withdrawals (inventory increase + bank decrease) never touch `sessionOutstanding` — the deposit signature requires an inventory decrease, so a withdraw-then-redeposit of pre-existing stock is naturally inert and cannot be misattributed.
+
+   **`[v8]` "Naturally inert" was true of this algorithm and false of the system.** A withdrawal is indeed invisible to the three-way minimum — but the inventory increase that comes with it then falls through to §16's generation catch-all, which credits *anything* unexplained arriving inside the XP window. Withdrawing 27 raw sharks while Cooking XP was still inside that window recorded 27 sharks as having been caught. Tracking bank *decreases* and claiming them against the inventory increase (§18 `[v8]`) is the missing mirror of this step. The lesson generalises: a safeguard that holds within one correlator says nothing about what the pools it doesn't claim are used for downstream.
 7. Per-tick (not per-bank-session) diffing is required to correctly capture "Deposit All", partial deposits, and multiple deposit/withdraw actions within one bank visit — a single diff taken at bank-close would miss intermediate withdraw/redeposit sequences.
 
 ## 26. BANK SNAPSHOT SUPPORT `[v2]`
@@ -1068,6 +1080,8 @@ Do not attribute unrelated bank changes to the session.
 Example fishing test: catch 100, drop 10, repick 2, bank 92.
 
 Expected: `generated = 100, dropped = 10, repicked = 2, banked = 92, net retained = 92`. No double counting.
+
+**`[v8]` "No double counting" has to be tested at the tick level, not the model level.** Every test written before v8 exercised `ActivitySession`/`ItemFlowEntry` arithmetic directly, which is why all three §18 `[v8]` defects shipped: each one needed *two containers moving in the same tick* to appear, and nothing drove `SessionManager` through a tick sequence at all. `SessionManagerItemFlowTest` covers that layer — detect → prompt → start → tick, with real container snapshots — and pairs each regression case with a control asserting the catch-all still fires on a genuine movement, so a defect can never be "fixed" by quietly disabling the rule. The harness is small: `SkillingInfoConfig` is all-defaults so `new SkillingInfoConfig() {}` suffices, `SessionRepository` subclasses to a no-op, and `ItemUseStore`'s `ConfigManager` is only touched when a session is finalised.
 
 ## 57. TESTING — SLAYER FLOW
 

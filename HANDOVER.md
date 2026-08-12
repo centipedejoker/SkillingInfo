@@ -9,7 +9,7 @@ that already cost real time once.
 
 ## 1. Where it stands
 
-A working RuneLite plugin: 32 source files, 62 passing tests, 45 commits.
+A working RuneLite plugin: 32 source files, 69 passing tests, 45 commits.
 Every phase in `SPEC.md` §61 is built, and everything except parts of Phase 5
 has been validated in live gameplay by the owner.
 
@@ -116,6 +116,23 @@ buffer's total span.
 EDT stops the panel updating entirely, which looks identical to "the plugin
 stopped working". `SkillingInfoPlugin.refreshPanel()` guards against this
 deliberately — keep it.
+
+**Item flow ends in two catch-all rules that accept anything unexplained.**
+Inside the XP window, an unclaimed inventory increase becomes generated
+output and an unclaimed decrease becomes consumption. So every pool feeding
+them must be drained *unconditionally* and claimed against in a fixed order
+(§18 `[v8]`) — and it's the half you didn't write that bites: the wield
+direction was handled and the unequip direction wasn't, so taking a glory
+off mid-chop was recorded as a log; bank deposits were capped by a three-way
+minimum and withdrawals weren't, so withdrawing 27 raw sharks was recorded
+as catching them. Drain on one path only and the leftovers don't just leak,
+they later cancel a real movement of the same item.
+
+**Test this layer by driving ticks, not by calling the model.** Every test
+before v8 poked `ActivitySession` directly, and the three bugs above all
+needed two containers moving in the same tick to appear — so 62 green tests
+said nothing about them. `SessionManagerItemFlowTest` shows the harness;
+it's about 40 lines and needs no mocking framework.
 
 ---
 

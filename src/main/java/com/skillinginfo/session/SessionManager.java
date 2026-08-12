@@ -415,20 +415,49 @@ public class SessionManager
 
 	/**
 	 * SPEC.md §16: correlates this tick's inventory deltas against the
-	 * current session. Confirmed pickups (§20a) are resolved first and
-	 * removed from the increase pool, so the same inventory increase can
-	 * never be double-counted as both a pickup and direct acquisition -
-	 * a real risk since a Take click and a fresh qualifying XP event can
-	 * land close together (e.g. looting right after a Slayer kill).
-	 * Whatever's left is attributed as direct acquisition only within a
-	 * small window of ticks after XP was last credited (§16 [v7 fix]) -
-	 * inventory gained well outside that window isn't "generated" in
-	 * Phase 2/3's sense.
+	 * current session.
+	 * <p>
+	 * Both pools are drained by {@link #claim} in order of how specifically
+	 * each signal explains a movement, and only what survives reaches the
+	 * catch-all generation and consumption rules at the end. That ordering
+	 * is the whole safeguard against counting one movement twice:
+	 * <ol>
+	 * <li>moves into or out of another container (worn, bank) - the item
+	 * didn't enter or leave the account at all, it only travelled;</li>
+	 * <li>click-gated correlations - confirmed pickups (§20a) and drops
+	 * (§21), which matter because a Take click and a fresh qualifying XP
+	 * event can land close together (looting right after a Slayer kill);</li>
+	 * <li>bank deposits (§25a), evidenced by the matching bank increase;</li>
+	 * <li>whatever is left, and only within a small window of ticks after XP
+	 * was last credited (§16 [v7 fix]): an increase is the activity's output
+	 * (§16), a decrease is the activity consuming something (§18).</li>
+	 * </ol>
+	 * Step 1 is the one the catch-alls are most exposed to, because they
+	 * accept <em>anything</em> unexplained inside the XP window: without it,
+	 * taking off a cape mid-chop books an axe as woodcutting output, and
+	 * withdrawing 27 raw fish at a bank books them as having been caught.
 	 */
 	private void creditItemFlow()
 	{
 		Map<Integer, Integer> increased = inventoryDeltaTracker.consumeIncreased();
 		Map<Integer, Integer> decreased = inventoryDeltaTracker.consumeDecreased();
+
+		// §16/§18: an inventory change with a matching move in another
+		// container isn't a gain or a loss at all - the item only travelled.
+		// Both directions of both containers are drained every tick,
+		// whatever the session state: a pool emptied on only one code path
+		// accumulates stale deltas that later cancel a real, unrelated
+		// movement of the same item.
+		Map<Integer, Integer> equipped = equipmentDeltaTracker.consumeIncreased();
+		Map<Integer, Integer> unequipped = equipmentDeltaTracker.consumeDecreased();
+		Map<Integer, Integer> withdrawn = bankCorrelator.consumeDecreased();
+
+		// Claimed ahead of every other signal, including the click-gated
+		// ones: a second container moving the item is stronger evidence than
+		// a menu click, which only says what the player asked for.
+		claim(increased, unequipped);
+		claim(increased, withdrawn);
+		claim(decreased, equipped);
 
 		if (!increased.isEmpty() || !decreased.isEmpty())
 		{
@@ -450,9 +479,9 @@ public class SessionManager
 		}
 
 		Map<Integer, Integer> confirmedPickups = pickupCorrelator.resolve(currentTick, increased);
+		claim(increased, confirmedPickups);
 		for (Map.Entry<Integer, Integer> entry : confirmedPickups.entrySet())
 		{
-			increased.merge(entry.getKey(), -entry.getValue(), Integer::sum);
 			creditPickup(entry.getKey(), entry.getValue());
 		}
 		if (!confirmedPickups.isEmpty())
@@ -470,22 +499,18 @@ public class SessionManager
 		{
 			for (Map.Entry<Integer, Integer> entry : increased.entrySet())
 			{
-				if (entry.getValue() <= 0)
-				{
-					continue;
-				}
 				log.debug("Crediting generated: itemId={} qty={}", entry.getKey(), entry.getValue());
 				currentSession.addGenerated(entry.getKey(), entry.getValue());
 			}
 		}
 
+		// drops are click-gated and therefore more specific than the bank
+		// signature below - claimed out of the decrease pool first so one
+		// inventory decrease can't read as both
 		Map<Integer, Integer> confirmedDrops = dropCorrelator.resolve(currentTick, decreased);
+		claim(decreased, confirmedDrops);
 		for (Map.Entry<Integer, Integer> entry : confirmedDrops.entrySet())
 		{
-			// drops are click-gated and therefore more specific than the
-			// bank signature below - claim them out of the decrease pool
-			// first so one inventory decrease can't read as both
-			decreased.merge(entry.getKey(), -entry.getValue(), Integer::sum);
 			currentSession.addDropped(entry.getKey(), entry.getValue());
 		}
 		if (!confirmedDrops.isEmpty())
@@ -494,15 +519,15 @@ public class SessionManager
 			recordNonXpActivity();
 		}
 
+		// the correlator reads the decrease pool without consuming it, so
+		// claim it here - otherwise a deposit would also be counted as
+		// consumption below
 		Map<Integer, Integer> confirmedBanked = bankCorrelator.resolve(decreased,
 			itemId -> currentSession.getOutstandingForBanking(itemId));
+		claim(decreased, confirmedBanked);
 		for (Map.Entry<Integer, Integer> entry : confirmedBanked.entrySet())
 		{
 			log.debug("Crediting banked: itemId={} qty={}", entry.getKey(), entry.getValue());
-			// the correlator reads the decrease pool without consuming it,
-			// so claim it here - otherwise a deposit would also be counted
-			// as consumption below
-			decreased.merge(entry.getKey(), -entry.getValue(), Integer::sum);
 			currentSession.addBanked(entry.getKey(), entry.getValue());
 		}
 		if (!confirmedBanked.isEmpty())
@@ -523,6 +548,38 @@ public class SessionManager
 		if (!TrackingGroups.isCombatGroup(currentSession.getSkill()))
 		{
 			currentSession.setActivity(ActivityClassifier.classify(currentSession));
+		}
+	}
+
+	/**
+	 * Removes {@code claimed} from {@code pool}, dropping entries once
+	 * they're fully accounted for.
+	 * <p>
+	 * This is the one mechanism that keeps a single inventory movement from
+	 * being counted twice: every signal that can explain part of a delta
+	 * takes its share out of the pool, most specific first, and only what
+	 * survives reaches the catch-all generation and consumption rules.
+	 * Entries are removed rather than left at zero so the catch-alls can
+	 * iterate the pool without re-checking for spent ones.
+	 */
+	private static void claim(Map<Integer, Integer> pool, Map<Integer, Integer> claimed)
+	{
+		for (Map.Entry<Integer, Integer> entry : claimed.entrySet())
+		{
+			Integer remaining = pool.get(entry.getKey());
+			if (remaining == null)
+			{
+				continue;
+			}
+			int left = remaining - entry.getValue();
+			if (left > 0)
+			{
+				pool.put(entry.getKey(), left);
+			}
+			else
+			{
+				pool.remove(entry.getKey());
+			}
 		}
 	}
 
@@ -556,16 +613,10 @@ public class SessionManager
 			return;
 		}
 
-		Map<Integer, Integer> equipped = equipmentDeltaTracker.consumeIncreased();
 		for (Map.Entry<Integer, Integer> entry : decreased.entrySet())
 		{
-			int qty = entry.getValue() - equipped.getOrDefault(entry.getKey(), 0);
-			if (qty <= 0)
-			{
-				continue;
-			}
-			log.debug("Crediting consumed: itemId={} qty={}", entry.getKey(), qty);
-			currentSession.addConsumed(entry.getKey(), qty);
+			log.debug("Crediting consumed: itemId={} qty={}", entry.getKey(), entry.getValue());
+			currentSession.addConsumed(entry.getKey(), entry.getValue());
 		}
 	}
 

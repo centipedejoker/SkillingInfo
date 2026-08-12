@@ -22,6 +22,7 @@ public class BankCorrelator
 {
 	private final Map<Integer, Integer> lastSnapshot = new HashMap<>();
 	private final Map<Integer, Integer> increased = new HashMap<>();
+	private final Map<Integer, Integer> decreased = new HashMap<>();
 
 	/**
 	 * The first bank container we ever see establishes the diffing baseline
@@ -54,6 +55,14 @@ public class BankCorrelator
 				if (delta > 0)
 				{
 					increased.merge(entry.getKey(), delta, Integer::sum);
+				}
+			}
+			for (Map.Entry<Integer, Integer> entry : lastSnapshot.entrySet())
+			{
+				int delta = entry.getValue() - current.getOrDefault(entry.getKey(), 0);
+				if (delta > 0)
+				{
+					decreased.merge(entry.getKey(), delta, Integer::sum);
 				}
 			}
 		}
@@ -103,6 +112,23 @@ public class BankCorrelator
 	}
 
 	/**
+	 * Bank <em>decreases</em> - withdrawals. Not a correlation signal in their
+	 * own right: their job is to explain away the matching inventory increase
+	 * so it isn't mistaken for skilling output (§16). Withdrawing 27 raw fish
+	 * at a bank while Cooking XP is still inside the generation window
+	 * otherwise reads as having produced 27 fish.
+	 * <p>
+	 * The deposit side has always been protected by the three-way minimum in
+	 * {@link #resolve}; this is its missing mirror.
+	 */
+	public Map<Integer, Integer> consumeDecreased()
+	{
+		Map<Integer, Integer> result = new HashMap<>(decreased);
+		decreased.clear();
+		return result;
+	}
+
+	/**
 	 * Clears pending un-consumed deltas only. Deliberately does NOT clear
 	 * {@code lastSnapshot} or {@code baselineEstablished} - that's the
 	 * diffing baseline, not per-session state (same reasoning as
@@ -111,5 +137,6 @@ public class BankCorrelator
 	public void reset()
 	{
 		increased.clear();
+		decreased.clear();
 	}
 }
