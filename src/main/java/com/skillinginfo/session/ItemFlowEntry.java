@@ -59,6 +59,17 @@ public class ItemFlowEntry
 		repicked += qty;
 	}
 
+	/**
+	 * SPEC.md §18: used up by the activity - cooked, smelted, fletched,
+	 * eaten, fired. Not a drop (still exists, on the floor) and not a
+	 * deposit (still exists, in the bank): consumed items are genuinely
+	 * gone, so they reduce net retained.
+	 */
+	void addConsumed(int qty)
+	{
+		consumed += qty;
+	}
+
 	/** SPEC.md §25a: confirmed moved from inventory into the bank this session. */
 	void addBanked(int qty)
 	{
@@ -69,8 +80,9 @@ public class ItemFlowEntry
 	 * SPEC.md §28: net retained = acquired - discards - consumption ±
 	 * repickup. Banking deliberately does NOT reduce this - a banked item
 	 * is still retained, and per §33 it's the *strongest* form of account
-	 * gain, not a loss. `consumed` stays zero until §18's ITEM_CONSUMED
-	 * path exists.
+	 * gain, not a loss. Consumption does reduce it: those items are gone.
+	 * Clamped at zero because a session can legitimately consume items it
+	 * never acquired (cooking a stack you already had).
 	 */
 	public int getNetRetained()
 	{

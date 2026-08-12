@@ -101,6 +101,15 @@ public class ActivitySession
 		itemFlow.computeIfAbsent(itemId, ItemFlowEntry::new).addRepicked(qty);
 	}
 
+	public void addConsumed(int itemId, int qty)
+	{
+		if (qty <= 0)
+		{
+			return;
+		}
+		itemFlow.computeIfAbsent(itemId, ItemFlowEntry::new).addConsumed(qty);
+	}
+
 	public void addBanked(int itemId, int qty)
 	{
 		if (qty <= 0)
@@ -133,6 +142,11 @@ public class ActivitySession
 	public int getTotalNetRetained()
 	{
 		return itemFlow.values().stream().mapToInt(ItemFlowEntry::getNetRetained).sum();
+	}
+
+	public int getTotalConsumed()
+	{
+		return itemFlow.values().stream().mapToInt(ItemFlowEntry::getConsumed).sum();
 	}
 
 	public int getTotalBanked()

@@ -38,6 +38,10 @@ public class SessionManager
 	private final XpTracker xpTracker = new XpTracker();
 	private final SessionClock clock = new SessionClock();
 	private final InventoryDeltaTracker inventoryDeltaTracker = new InventoryDeltaTracker();
+	// Equipment is diffed with the same engine: wielding an item removes it
+	// from the inventory, which would otherwise look exactly like consuming
+	// it (§18 [v7]).
+	private final InventoryDeltaTracker equipmentDeltaTracker = new InventoryDeltaTracker();
 	private final DropCorrelator dropCorrelator = new DropCorrelator();
 	private final GroundItemTracker groundItemTracker = new GroundItemTracker();
 	private final PickupCorrelator pickupCorrelator = new PickupCorrelator();
@@ -132,6 +136,12 @@ public class SessionManager
 	public void onBankChanged(Item[] items)
 	{
 		bankCorrelator.onBankChanged(items);
+	}
+
+	/** SPEC.md §18 [v7]: needed only to tell a wield apart from a consumption. */
+	public void onEquipmentChanged(Item[] items)
+	{
+		equipmentDeltaTracker.onInventoryChanged(items);
 	}
 
 	/**
@@ -373,6 +383,10 @@ public class SessionManager
 		for (Map.Entry<Integer, Integer> entry : confirmedBanked.entrySet())
 		{
 			log.debug("Crediting banked: itemId={} qty={}", entry.getKey(), entry.getValue());
+			// the correlator reads the decrease pool without consuming it,
+			// so claim it here - otherwise a deposit would also be counted
+			// as consumption below
+			decreased.merge(entry.getKey(), -entry.getValue(), Integer::sum);
 			currentSession.addBanked(entry.getKey(), entry.getValue());
 		}
 		if (!confirmedBanked.isEmpty())
@@ -383,10 +397,55 @@ public class SessionManager
 			recordNonXpActivity();
 		}
 
+		creditConsumption(decreased);
+
 		// SPEC.md §16: reclassify from what's been produced so far. Cheap,
 		// and re-running it every tick means the name sharpens as evidence
 		// accumulates rather than being fixed by the first item seen.
 		currentSession.setActivity(ActivityClassifier.classify(currentSession));
+	}
+
+	/**
+	 * SPEC.md §18: an inventory decrease that no more specific signal
+	 * explains, arriving while the session is gaining XP, is the activity
+	 * consuming something - the raw fish behind the cooked one, the ore
+	 * behind the bar, the runes behind the cast.
+	 * <p>
+	 * This is deliberately the exact mirror of how generation is detected
+	 * (§16): same XP window, opposite direction. Everything with a more
+	 * specific explanation has already claimed its share of the decrease
+	 * pool first - drops (click-gated), bank deposits (bank-backed), and
+	 * wields (matched by an equipment increase) - so what remains is
+	 * genuinely unexplained loss during productive activity.
+	 * <p>
+	 * Note this makes §18's ITEM_TRANSFORMED recipe table unnecessary for
+	 * correct accounting: cooking 100 raw sharks records 100 consumed and
+	 * 100 generated independently, which nets out correctly without
+	 * needing to know that one specifically became the other.
+	 * <p>
+	 * Known limitation: moving items into another container that isn't the
+	 * bank - a looting bag, a POH storage - reads as consumption. That
+	 * undercounts retention rather than inventing gain, which is the side
+	 * §27 says to err on.
+	 */
+	private void creditConsumption(Map<Integer, Integer> decreased)
+	{
+		if (currentTick - lastXpCreditTick > GENERATION_WINDOW_TICKS)
+		{
+			return;
+		}
+
+		Map<Integer, Integer> equipped = equipmentDeltaTracker.consumeIncreased();
+		for (Map.Entry<Integer, Integer> entry : decreased.entrySet())
+		{
+			int qty = entry.getValue() - equipped.getOrDefault(entry.getKey(), 0);
+			if (qty <= 0)
+			{
+				continue;
+			}
+			log.debug("Crediting consumed: itemId={} qty={}", entry.getKey(), qty);
+			currentSession.addConsumed(entry.getKey(), qty);
+		}
 	}
 
 	/**
@@ -586,6 +645,7 @@ public class SessionManager
 		currentSession = session;
 		clock.reset();
 		inventoryDeltaTracker.reset();
+		equipmentDeltaTracker.reset();
 		dropCorrelator.reset();
 		pickupCorrelator.reset();
 		bankCorrelator.reset();
@@ -650,6 +710,7 @@ public class SessionManager
 		currentSession = null;
 		clock.reset();
 		inventoryDeltaTracker.reset();
+		equipmentDeltaTracker.reset();
 		dropCorrelator.reset();
 		pickupCorrelator.reset();
 		bankCorrelator.reset();

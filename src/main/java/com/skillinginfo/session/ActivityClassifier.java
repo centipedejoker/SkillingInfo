@@ -47,6 +47,9 @@ public final class ActivityClassifier
 		Map<Integer, String> MINING = table(Skill.MINING, "Ores");
 		Map<Integer, String> HUNTER = table(Skill.HUNTER, "Catches");
 		Map<Integer, String> FARMING = table(Skill.FARMING, "Harvested");
+		Map<Integer, String> COOKING = table(Skill.COOKING, "Cooked");
+		Map<Integer, String> SMITHING = table(Skill.SMITHING, "Smelted");
+		Map<Integer, String> RUNECRAFT = table(Skill.RUNECRAFT, "Runes");
 		WOODCUTTING.put(ItemID.LOGS, "Regular trees");
 		WOODCUTTING.put(ItemID.ACHEY_TREE_LOGS, "Achey trees");
 		WOODCUTTING.put(ItemID.OAK_LOGS, "Oak trees");
@@ -125,6 +128,48 @@ public final class ActivityClassifier
 		FARMING.put(ItemID.UNIDENTIFIED_DWARF_WEED, "Dwarf weed");
 		FARMING.put(ItemID.UNIDENTIFIED_TORSTOL, "Torstol");
 		FARMING.put(ItemID.UNIDENTIFIED_HUASCA, "Huasca");
+
+		// Production skills. These only became honest to support once §18's
+		// consumption detection existed - before it, the ledger showed the
+		// product gained with no sign of the ingredient spent.
+		COOKING.put(ItemID.SHRIMP, "Shrimp");
+		COOKING.put(ItemID.ANCHOVIES, "Anchovies");
+		COOKING.put(ItemID.SARDINE, "Sardine");
+		COOKING.put(ItemID.HERRING, "Herring");
+		COOKING.put(ItemID.TROUT, "Trout");
+		COOKING.put(ItemID.SALMON, "Salmon");
+		COOKING.put(ItemID.PIKE, "Pike");
+		COOKING.put(ItemID.TUNA, "Tuna");
+		COOKING.put(ItemID.LOBSTER, "Lobster");
+		COOKING.put(ItemID.BASS, "Bass");
+		COOKING.put(ItemID.SWORDFISH, "Swordfish");
+		COOKING.put(ItemID.MONKFISH, "Monkfish");
+		COOKING.put(ItemID.SHARK, "Shark");
+		COOKING.put(ItemID.TBWT_COOKED_KARAMBWAN, "Karambwans");
+
+		SMITHING.put(ItemID.BRONZE_BAR, "Bronze bars");
+		SMITHING.put(ItemID.IRON_BAR, "Iron bars");
+		SMITHING.put(ItemID.SILVER_BAR, "Silver bars");
+		SMITHING.put(ItemID.STEEL_BAR, "Steel bars");
+		SMITHING.put(ItemID.GOLD_BAR, "Gold bars");
+		SMITHING.put(ItemID.MITHRIL_BAR, "Mithril bars");
+		SMITHING.put(ItemID.ADAMANTITE_BAR, "Adamantite bars");
+		SMITHING.put(ItemID.RUNITE_BAR, "Runite bars");
+
+		RUNECRAFT.put(ItemID.AIRRUNE, "Air runes");
+		RUNECRAFT.put(ItemID.MINDRUNE, "Mind runes");
+		RUNECRAFT.put(ItemID.WATERRUNE, "Water runes");
+		RUNECRAFT.put(ItemID.EARTHRUNE, "Earth runes");
+		RUNECRAFT.put(ItemID.FIRERUNE, "Fire runes");
+		RUNECRAFT.put(ItemID.BODYRUNE, "Body runes");
+		RUNECRAFT.put(ItemID.COSMICRUNE, "Cosmic runes");
+		RUNECRAFT.put(ItemID.CHAOSRUNE, "Chaos runes");
+		RUNECRAFT.put(ItemID.NATURERUNE, "Nature runes");
+		RUNECRAFT.put(ItemID.LAWRUNE, "Law runes");
+		RUNECRAFT.put(ItemID.DEATHRUNE, "Death runes");
+		RUNECRAFT.put(ItemID.BLOODRUNE, "Blood runes");
+		RUNECRAFT.put(ItemID.ASTRALRUNE, "Astral runes");
+		RUNECRAFT.put(ItemID.WRATHRUNE, "Wrath runes");
 	}
 
 	private ActivityClassifier()

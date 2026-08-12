@@ -204,6 +204,10 @@ public class SkillingInfoPlugin extends Plugin
 		{
 			sessionManager.onBankChanged(event.getItemContainer().getItems());
 		}
+		else if (event.getContainerId() == InventoryID.WORN)
+		{
+			sessionManager.onEquipmentChanged(event.getItemContainer().getItems());
+		}
 	}
 
 	@Subscribe
