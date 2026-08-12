@@ -124,9 +124,20 @@ public class SkillingInfoPlugin extends Plugin
 	@Override
 	protected void shutDown()
 	{
+		// A session in progress is real recorded data. Toggling the plugin
+		// off used to discard it silently - onLogout already persists on the
+		// way out, and shutdown has exactly the same obligation.
+		if (sessionManager != null)
+		{
+			sessionManager.stop();
+		}
+
 		clientToolbar.removeNavigation(navButton);
-		sessionManager = null;
-		panel = null;
+
+		// Deliberately not nulling sessionManager/panel: an event already in
+		// flight would then NPE on the way through, turning a clean shutdown
+		// into a stack trace in the user's log. The instance is discarded
+		// either way.
 	}
 
 	@Subscribe

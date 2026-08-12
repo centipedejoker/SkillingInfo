@@ -55,23 +55,57 @@ Terms used throughout the panel and the exported data:
 Gross loot and account gain routinely disagree, sometimes by a lot — that's
 the number this plugin exists to surface.
 
-## Status
+## What it tracks
 
-Phase 1 scaffold (see `SPEC.md` §61):
+**Per session**
+- Active, idle and total time, with auto-pause when you stop
+- XP, XP/hour, actions and actions/hour — all scoped to *this* session
+- Retention rate: what share of what you produced you actually kept
+- Every item's full lifecycle, and the projected XP your banked resources represent
 
-- [x] Plugin shell, sidebar (Current / History)
-- [x] Candidate XP-drop detection with Start / Ignore prompt
-- [x] Session state machine (idle → candidate → prompted → active/paused →
-      complete → suppressed)
-- [x] XP, active/idle/overall time, active & overall XP/hour
-- [x] Pause / Resume / Stop
-- [x] Local JSON Lines history, scoped per account
-      (`~/.runelite/skilling-info/<accountHash>/sessions.jsonl`)
-- [ ] Item-flow tracking (generated/acquired/dropped/repicked/banked) —
-      Phases 2–4
-- [ ] Activity classification, Slayer loot flow, trips — Phases 5–6
+**Across sessions**
+- A per-skill all-time summary — time, XP, banked XP
+- A running per-item tally of what the account has actually accumulated
+- Every completed session, expandable to its full lifecycle ledger
 
-Full product spec and design rationale: [`SPEC.md`](SPEC.md).
+**Activities it can name**
+
+Woodcutting, Fishing, Mining, Hunter, Farming, Cooking, Smithing and
+Runecraft are identified by what they produce ("Oak trees", "Fly fishing",
+"Runite ore"). Slayer sessions are named by the task itself, taken from
+RuneLite's own Slayer plugin.
+
+Any skill not in that list still tracks completely — time, XP, rates, item
+flow — it just shows as "Unclassified" rather than a named method. That's a
+deliberate outcome, not a gap: guessing an activity from ambiguous evidence
+would be worse than admitting it isn't known.
+
+**Slayer**
+
+Kills and kills/hour scoped to the session, plus the loot-flow story: what
+dropped, what you actually picked up, what you dropped again later, and what
+was banked. For combat the retention figure is labelled *pickup rate*, since
+it answers a different question — what share of the loot you bothered to
+take.
+
+## Where your data lives
+
+One JSON Lines file per account:
+
+```
+~/.runelite/skilling-info/<accountHash>/sessions.jsonl
+```
+
+One completed session per line, appended and never rewritten. Raw item
+counts are stored as the authoritative record, so an external tool can
+recompute anything derived from them.
+
+Projected XP is the exception: it's resolved when the session ends and then
+frozen. If you later decide your iron ore is destined for steel bars rather
+than iron, that applies to future sessions — it does not silently rewrite
+what past sessions reported.
+
+Nothing is sent anywhere. There is no HTTP, no socket, no telemetry.
 
 ## Running locally
 
@@ -128,16 +162,25 @@ RuneLite's `OSXFullScreenAdapter` hits a Java 17 module-access error and
 the client fails to open at all. If you're not using the `run` task
 directly (e.g. a custom IDE run configuration), add that JVM arg yourself.
 
-This has been verified end-to-end: `./gradlew build` compiles cleanly, and
-`SkillingInfoPlugin` starts up, registers its `GameTick`/`StatChanged`/
-`GameStateChanged` subscribers, and reaches `Plugin SkillingInfoPlugin is
-now running` with zero exceptions. What hasn't been verified from this
-environment is the sidebar rendering correctly and behaving right in a real
-play session — that part's still on you.
+`./gradlew build` also runs the unit tests, which cover the parts that fail
+silently rather than loudly: bank-deposit attribution, the session-detection
+gate, equipment that grants two skills at once, and the guarantee that
+changing a product selection never rewrites a recorded session.
 
 ## Compliance
 
-Skilling Info only observes RuneLite events (`StatChanged`, `GameTick`,
-inventory/ground-item/bank container changes). It never sends input, clicks,
-or menu actions, and makes no network requests — everything is local. See
-`SPEC.md` §47.
+Skilling Info only observes RuneLite events — XP, game ticks, and
+inventory, equipment, bank and ground-item changes. It never sends input,
+clicks or menu actions, never alters menus, and makes no network requests of
+its own. It uses no reflection, spawns no processes, and reads no
+credentials. See `SPEC.md` §47.
+
+It builds on RuneLite's own plugins rather than duplicating them: task state
+comes from the Slayer plugin, and monster drops from the Loot Tracker.
+
+## Documentation
+
+`SPEC.md` is the full product specification and design record — including
+why particular decisions were made, and where implementation forced a
+rethink. `DESIGN_BRIEF.md` is the brief the sidebar layout was designed
+against.

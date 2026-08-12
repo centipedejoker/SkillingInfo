@@ -1251,6 +1251,16 @@ Verified against RuneLite's plugin-hub submission docs directly. Status as of th
 | Plugin Hub pointer file | A PR to `runelite/plugin-hub` adding `plugins/<internal-name>` containing `repository=<git URL>` and the full 40-character `commit=<hash>` of the version being published | Not applicable until there's a tagged, working release to point at — this is the actual "deployment" step, distinct from writing code |
 | Dependency verification | Non-transitive third-party dependencies need Gradle's cryptographic dependency-verification set up | Not currently needed — the scaffold only takes `compileOnly` on `runelite-client` and `lombok`; revisit if a later phase adds a real third-party library (e.g. a charting dependency) |
 
+`[v7]` **Release-readiness pass completed.** Verified: no reflection, JNI,
+process spawning or network use anywhere in the source (§47); the built jar
+contains only our own 40 classes; the repo matches `runelite/example-plugin`'s
+layout; `.gitignore` covers all build output; a clean build passes with no
+warnings and all tests green.
+
+Two things it caught:
+- **`shutDown()` discarded an in-progress session without persisting it** — disabling the plugin mid-session silently lost everything tracked. `onLogout()` already handled this correctly; shutdown has the same obligation and now does the same thing. It also no longer nulls fields an in-flight event could still touch, which would have turned a clean shutdown into a stack trace in the user's log.
+- **The README still described the plugin as a "Phase 1 scaffold"** with item-flow tracking listed as unbuilt. Rewritten to describe what actually ships, satisfying §58.
+
 **Remaining before either section can be called fully locked:**
 1. A real repo-root `icon.png` (≤48×72px) and a real `NavigationButton` sidebar icon — both still placeholder/programmatic, both genuine design work rather than something to spec further in prose.
 2. §59's three required screenshots — blocked on Phase 2 and Phase 6 actually existing to screenshot.
