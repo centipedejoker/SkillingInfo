@@ -87,6 +87,12 @@ public class SessionManager
 	private final Map<Integer, Integer> candidateGeneratedBuffer = new HashMap<>();
 	private int lastCandidateXpTick = Integer.MIN_VALUE / 2;
 
+	// §37 [v7]: the Slayer plugin reports progress against the *task*, which
+	// may have been part-finished before this session began. Baselining the
+	// remaining count at session start is what keeps kills session-scoped -
+	// the same trap that made XP Tracker's rates unusable (§14).
+	private int lastRemainingAmount = -1;
+
 	public SessionManager(SkillingInfoConfig config, SessionRepository repository, ItemUseStore itemUseStore)
 	{
 		this.config = config;
@@ -158,6 +164,71 @@ public class SessionManager
 	public void onBankChanged(Item[] items)
 	{
 		bankCorrelator.onBankChanged(items);
+
+		// §39: a bank visit is the natural trip boundary. Recorded from
+		// Phase 1 onwards as a plain timestamp list; aggregating trips out
+		// of it is still deferred, but the data is no longer lost.
+		if ((state == SessionState.ACTIVE || state == SessionState.PAUSED) && currentSession != null)
+		{
+			currentSession.recordBankVisit(Instant.now());
+		}
+	}
+
+	/**
+	 * §37: Slayer task progress, polled each tick. Kills are derived from
+	 * the *change* in remaining count since the last observation, never from
+	 * the task's own totals, so a session that joins a part-finished task
+	 * counts only what happened while it was running.
+	 * <p>
+	 * A rise in the remaining count means a new task was assigned, so the
+	 * baseline resets rather than recording a negative.
+	 */
+	public void onSlayerTaskUpdate(String task, String location, int remainingAmount)
+	{
+		if (state != SessionState.ACTIVE || currentSession == null
+			|| !TrackingGroups.isCombatGroup(currentSession.getSkill()))
+		{
+			lastRemainingAmount = remainingAmount;
+			return;
+		}
+
+		if (lastRemainingAmount >= 0 && remainingAmount < lastRemainingAmount)
+		{
+			currentSession.recordKills(lastRemainingAmount - remainingAmount);
+			recordNonXpActivity();
+		}
+		lastRemainingAmount = remainingAmount;
+
+		// §16: for combat the task is a far better activity name than
+		// anything the item output could suggest
+		if (task != null && !task.isEmpty())
+		{
+			currentSession.setActivity(location == null || location.isEmpty()
+				? task
+				: task + ", " + location);
+		}
+	}
+
+	/**
+	 * §37/§18: what a monster dropped, from RuneLite's own loot tracking
+	 * rather than re-derived from raw events (§5).
+	 * <p>
+	 * Recorded as generated-only: it is on the floor, not in the inventory.
+	 * It becomes acquired only if {@link PickupCorrelator} later confirms it
+	 * was taken - which is precisely the gap between gross loot and account
+	 * gain this plugin exists to measure.
+	 */
+	public void onNpcLootReceived(Map<Integer, Integer> items)
+	{
+		if ((state != SessionState.ACTIVE && state != SessionState.PAUSED) || currentSession == null)
+		{
+			return;
+		}
+		for (Map.Entry<Integer, Integer> entry : items.entrySet())
+		{
+			currentSession.addGeneratedOnly(entry.getKey(), entry.getValue());
+		}
+		recordNonXpActivity();
 	}
 
 	/** SPEC.md §18 [v7]: needed only to tell a wield apart from a consumption. */
@@ -378,7 +449,12 @@ public class SessionManager
 			recordNonXpActivity();
 		}
 
-		if (currentTick - lastXpCreditTick <= GENERATION_WINDOW_TICKS)
+		// The "inventory rose while gaining XP" heuristic (§16) only makes
+		// sense for gathering, where output lands directly in the inventory.
+		// In combat XP is continuous, so it would mark *any* inventory gain
+		// as generated - loot there comes from LootReceived instead.
+		boolean gathering = !TrackingGroups.isCombatGroup(currentSession.getSkill());
+		if (gathering && currentTick - lastXpCreditTick <= GENERATION_WINDOW_TICKS)
 		{
 			for (Map.Entry<Integer, Integer> entry : increased.entrySet())
 			{
@@ -430,7 +506,12 @@ public class SessionManager
 		// SPEC.md §16: reclassify from what's been produced so far. Cheap,
 		// and re-running it every tick means the name sharpens as evidence
 		// accumulates rather than being fixed by the first item seen.
-		currentSession.setActivity(ActivityClassifier.classify(currentSession));
+		// Combat is named by its Slayer task instead (§37), which is both
+		// more accurate and already set, so don't overwrite it.
+		if (!TrackingGroups.isCombatGroup(currentSession.getSkill()))
+		{
+			currentSession.setActivity(ActivityClassifier.classify(currentSession));
+		}
 	}
 
 	/**
@@ -693,6 +774,7 @@ public class SessionManager
 		bankCorrelator.reset();
 		lastQualifyingTick = currentTick;
 		lastXpCreditTick = currentTick;
+		lastRemainingAmount = -1;
 
 		buffers.remove(candidateGroupKey);
 		candidateGroupKey = null;

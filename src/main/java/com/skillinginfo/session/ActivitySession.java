@@ -74,6 +74,9 @@ public class ActivitySession
 	 */
 	private int actions;
 
+	/** Kills credited to this session (§37), not to the task as a whole. */
+	private int kills;
+
 	private final Map<Integer, ItemFlowEntry> itemFlow = new LinkedHashMap<>();
 
 	/**
@@ -83,6 +86,16 @@ public class ActivitySession
 	 */
 	@Setter
 	private List<ProjectedXp> projection;
+
+	/** §17/§37: loot a monster dropped, whether or not it was picked up. */
+	public void addGeneratedOnly(int itemId, int qty)
+	{
+		if (qty <= 0)
+		{
+			return;
+		}
+		itemFlow.computeIfAbsent(itemId, ItemFlowEntry::new).addGeneratedOnly(qty);
+	}
 
 	public void addGenerated(int itemId, int qty)
 	{
@@ -220,6 +233,20 @@ public class ActivitySession
 		actions++;
 	}
 
+	public void recordKills(int count)
+	{
+		if (count > 0)
+		{
+			kills += count;
+		}
+	}
+
+	/** §37: kills per hour of active time. */
+	public double getKillsPerHour()
+	{
+		return activeSeconds > 0 ? kills / (double) activeSeconds * 3600 : 0;
+	}
+
 	/** §14: XP per hour of *active* time. */
 	public double getXpPerHour()
 	{
@@ -235,6 +262,24 @@ public class ActivitySession
 	public double getProjectedXpTotal()
 	{
 		return getProjection().stream().mapToDouble(ProjectedXp::getXp).sum();
+	}
+
+	/**
+	 * §39: records a bank visit as a trip boundary, ignoring repeats within
+	 * the same visit - the bank container fires on every deposit, and thirty
+	 * timestamps one second apart describe one trip, not thirty.
+	 */
+	public void recordBankVisit(Instant when)
+	{
+		if (!tripBoundaries.isEmpty())
+		{
+			Instant last = tripBoundaries.get(tripBoundaries.size() - 1);
+			if (when.minusSeconds(30).isBefore(last))
+			{
+				return;
+			}
+		}
+		tripBoundaries.add(when);
 	}
 
 	public void addTripBoundary(Instant when)

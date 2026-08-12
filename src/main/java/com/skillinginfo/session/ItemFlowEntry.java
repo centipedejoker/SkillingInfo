@@ -35,10 +35,25 @@ public class ItemFlowEntry
 		this.itemId = itemId;
 	}
 
+	/**
+	 * Skilling output: produced and, by the nature of gathering, already in
+	 * the inventory - so it counts as acquired in the same step.
+	 */
 	void addGenerated(int qty)
 	{
 		generated += qty;
 		directlyAcquired += qty;
+	}
+
+	/**
+	 * Combat loot: produced by the activity but lying on the floor, which is
+	 * not the same as having it (§17). It only becomes acquired if the
+	 * pickup correlator (§20a) later confirms it was taken - which is exactly
+	 * the gap between gross loot and account gain the plugin exists to show.
+	 */
+	void addGeneratedOnly(int qty)
+	{
+		generated += qty;
 	}
 
 	void addDropped(int qty)

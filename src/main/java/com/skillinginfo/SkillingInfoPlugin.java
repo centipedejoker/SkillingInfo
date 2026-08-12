@@ -12,6 +12,7 @@ import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import javax.inject.Inject;
@@ -31,12 +32,18 @@ import net.runelite.api.events.ItemSpawned;
 import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.gameval.InventoryID;
+import net.runelite.http.api.loottracker.LootRecordType;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ItemManager;
+import net.runelite.client.game.ItemStack;
 import net.runelite.client.game.SkillIconManager;
 import net.runelite.client.plugins.Plugin;
+import net.runelite.client.plugins.PluginDependency;
 import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.plugins.loottracker.LootReceived;
+import net.runelite.client.plugins.slayer.SlayerPlugin;
+import net.runelite.client.plugins.slayer.SlayerPluginService;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
 
@@ -46,6 +53,11 @@ import net.runelite.client.ui.NavigationButton;
 	description = "Tracks personal skilling sessions, XP rates, idle time, activity output, actual pickups, dropped items and resources retained.",
 	tags = {"skilling", "xp", "tracker", "slayer", "loot", "ironman"}
 )
+// §5/§37: Slayer task state comes from RuneLite's own Slayer plugin rather
+// than being re-derived from chat messages, so it's declared as a
+// dependency. Loot arrives via the core Loot Tracker's LootReceived event,
+// which needs no declaration.
+@PluginDependency(SlayerPlugin.class)
 public class SkillingInfoPlugin extends Plugin
 {
 	@Inject
@@ -62,6 +74,9 @@ public class SkillingInfoPlugin extends Plugin
 
 	@Inject
 	private ItemManager itemManager;
+
+	@Inject
+	private SlayerPluginService slayerPluginService;
 
 	@Inject
 	private ConfigManager configManager;
@@ -124,6 +139,10 @@ public class SkillingInfoPlugin extends Plugin
 	public void onGameTick(GameTick event)
 	{
 		sessionManager.onGameTick(client.getTickCount());
+		sessionManager.onSlayerTaskUpdate(
+			slayerPluginService.getTask(),
+			slayerPluginService.getTaskLocation(),
+			slayerPluginService.getRemainingAmount());
 		resolveItemNames();
 		SwingUtilities.invokeLater(this::refreshPanel);
 	}
@@ -211,6 +230,27 @@ public class SkillingInfoPlugin extends Plugin
 		{
 			sessionManager.onTakeClicked(event.getId());
 		}
+	}
+
+	/**
+	 * §37/§18: NPC drops, taken from RuneLite's own loot tracking rather
+	 * than re-derived from raw events (§5). Only NPC and EVENT loot counts -
+	 * a pickpocket or a clue casket is not this session's monster loot.
+	 */
+	@Subscribe
+	public void onLootReceived(LootReceived event)
+	{
+		if (event.getType() != LootRecordType.NPC && event.getType() != LootRecordType.EVENT)
+		{
+			return;
+		}
+
+		Map<Integer, Integer> items = new HashMap<>();
+		for (ItemStack stack : event.getItems())
+		{
+			items.merge(stack.getId(), stack.getQuantity(), Integer::sum);
+		}
+		sessionManager.onNpcLootReceived(items);
 	}
 
 	@Subscribe

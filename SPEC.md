@@ -1153,7 +1153,16 @@ Farming remains a partial exception that happens to work either way — seeds ar
 - **Unclassified remains a correct answer** (§15/§16): unrecognised output, or a skill with no table yet, tracks perfectly well without a named method. Tests assert this rather than treating it as a gap.
 - §40's outputs are now shown: units produced, units/hour (with a skill-appropriate noun — "Logs/hr", "Catches/hr") and retention rate (§32). Rows hide themselves when there's nothing to show.
 
-**Phase 6** — Slayer; KPH; task loadouts; loot flow; trip support (activates the `tripBoundaries` field pre-wired in Phase 1).
+**Phase 6** 🔨 — Slayer; KPH; loot flow; trip boundaries implemented (pending live validation). Task loadouts (§38) still to do.
+
+`[v7]` Implementation notes:
+- **Task state comes from `SlayerPluginService`**, one of RuneLite's seven public plugin APIs, rather than being re-derived from chat messages (§5). It supplies the task name, location and remaining count, so none of that is rebuilt here.
+- **Kills are session-scoped, derived from the *change* in remaining count.** The service reports progress against the task, which may have been part-finished before the session began — taking its totals directly would be the same scope error that made XP Tracker's rates unusable (§14). A rise in the remaining count means a new task, so the baseline resets rather than recording a negative.
+- **The task names the activity** (§16). For combat it's a far better signal than item output, so §16's item-based classifier is skipped entirely for combat sessions rather than fighting it for control of the name.
+- **Loot comes from the core Loot Tracker's `LootReceived`** (§5), filtered to NPC and EVENT loot, and is recorded as **generated-only**: it dropped, it's on the floor, and it is not yet the player's. It becomes acquired only when §20a's pickup correlator confirms it was taken. That gap *is* §2's whole thesis, so the model has to keep them apart — `ItemFlowEntry.addGeneratedOnly` exists for exactly this, while skilling output continues to count as acquired on generation because gathering puts it straight in the inventory.
+- **The generation heuristic is disabled for combat.** "Inventory rose while gaining XP" (§16) only makes sense for gathering; in combat XP is continuous, so it would mark every inventory gain as generated. Consequence, accepted: loot that drops straight to the inventory rather than the floor is counted as generated but not acquired, which undercounts rather than inventing gain (§27).
+- **The same ratio is relabelled for combat** — §31's pickup rate, not §32's retention. Identical arithmetic, different question, so it must not carry the same word.
+- **`tripBoundaries` is finally populated** (§39), on bank-open, debounced so one visit's many container updates record one trip rather than thirty. Trip *aggregation and display* remain out of scope.
 
 **Phase 7** 🔨 — **UI design pass** ✅ **live-validated** (all six states, item sprites, collapsible history, per-skill aggregate and running collected tally); documentation, screenshots, and Plugin Hub release still to do.
 

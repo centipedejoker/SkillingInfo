@@ -9,6 +9,7 @@ import com.skillinginfo.session.ProjectionBuilder;
 import com.skillinginfo.session.PromptSummary;
 import com.skillinginfo.session.SessionManager;
 import com.skillinginfo.session.SessionState;
+import com.skillinginfo.session.TrackingGroups;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
@@ -100,6 +101,9 @@ class CurrentView extends JPanel
 	private final JLabel actionsValue = Ui.bold("", Palette.TEXT);
 	private final JLabel actionsHrValue = Ui.bold("", Palette.TEXT);
 	private final JPanel actionsRow;
+	private final JLabel killsValue = Ui.bold("", Palette.TEXT);
+	private final JLabel kphValue = Ui.bold("", Palette.TEXT);
+	private final JPanel killsRow;
 	private final JLabel overflowLine = Ui.label("", FontManager.getRunescapeSmallFont(), Palette.DIMMEST);
 
 	private final JPanel projectionPanel = new JPanel();
@@ -136,6 +140,9 @@ class CurrentView extends JPanel
 		this.actionsRow = Ui.tileRow(
 			Ui.tile("ACTIONS", actionsValue, false),
 			Ui.tile("ACTIONS/HR", actionsHrValue, false));
+		this.killsRow = Ui.tileRow(
+			Ui.tile("KILLS", killsValue, false),
+			Ui.tile("KPH", kphValue, false));
 
 		setLayout(new BorderLayout());
 		setBackground(Palette.PANEL);
@@ -367,6 +374,8 @@ class CurrentView extends JPanel
 		p.add(Ui.tileRow(Ui.tile("XP", xpValue, false), Ui.tile("XP/HR", xpHrValue, false)));
 		p.add(Ui.gap(3));
 		p.add(actionsRow);
+		p.add(Ui.gap(3));
+		p.add(killsRow);
 
 		overflowLine.setBorder(BorderFactory.createEmptyBorder(5, 2, 0, 2));
 		p.add(Ui.fixHeight(overflowLine));
@@ -483,6 +492,7 @@ class CurrentView extends JPanel
 			pausedDetail.setText(formatShort(idle) + " · not counted");
 		}
 
+		boolean combat = TrackingGroups.isCombatGroup(session.getSkill());
 		double retention = session.getRetentionRate();
 		boolean hasRetention = retention >= 0;
 		retentionBlock.setVisible(hasRetention);
@@ -492,14 +502,19 @@ class CurrentView extends JPanel
 			int kept = session.getTotalNetRetained();
 			retentionValue.setText(String.format("%.1f%%", retention * 100));
 			retentionValue.setForeground(paused ? Palette.DIM : Palette.TEXT);
+			// §31: for combat the same ratio is the *pickup* rate - what
+			// share of what dropped you actually took - rather than how much
+			// of your own output you kept. Same arithmetic, different
+			// question, so it must not carry the same label.
+			retentionCaption.setText(combat ? "PICKED UP" : "RETAINED");
 			retentionCaption.setForeground(secondary);
 			retentionBar.set(retention,
 				paused ? Palette.ACCENT_MUTED : Palette.ACCENT,
 				null,
 				paused ? Palette.BORDER_PAUSED : Palette.BORDER);
-			keptLabel.setText(String.format("%,d kept", kept));
+			keptLabel.setText(String.format(combat ? "%,d taken" : "%,d kept", kept));
 			keptLabel.setForeground(secondary);
-			lostLabel.setText(String.format("%,d lost", Math.max(0, generated - kept)));
+			lostLabel.setText(String.format(combat ? "%,d left" : "%,d lost", Math.max(0, generated - kept)));
 			lostLabel.setForeground(secondary);
 		}
 
@@ -524,6 +539,16 @@ class CurrentView extends JPanel
 			actionsValue.setForeground(primary);
 			actionsHrValue.setText(String.format("%,d", Math.round(session.getActionsPerHour())));
 			actionsHrValue.setForeground(primary);
+		}
+
+		int kills = session.getKills();
+		killsRow.setVisible(kills > 0);
+		if (kills > 0)
+		{
+			killsValue.setText(String.format("%,d", kills));
+			killsValue.setForeground(primary);
+			kphValue.setText(String.format("%.1f", session.getKillsPerHour()));
+			kphValue.setForeground(primary);
 		}
 
 		overflowLine.setText(String.format("Total %s · overall %,d/hr",
