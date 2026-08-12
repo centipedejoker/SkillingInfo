@@ -98,6 +98,26 @@ public class SessionManager
 		history.addAll(repository.loadAll());
 	}
 
+	/**
+	 * How much of the Start/Ignore prompt's timeout is left, 1.0 → 0.0.
+	 * Drives the draining bar in the prompt (design §3.2) - the only
+	 * moving element in the panel, and the only cue that the offer expires
+	 * rather than waiting indefinitely.
+	 */
+	public double getPromptRemainingFraction()
+	{
+		if (state != SessionState.PROMPTED)
+		{
+			return 0;
+		}
+		int window = CandidateDetector.secondsToTicks(config.promptTimeoutSeconds());
+		if (window <= 0)
+		{
+			return 0;
+		}
+		return Math.max(0, Math.min(1, (promptExpiresAtTick - currentTick) / (double) window));
+	}
+
 	public SessionClock getClock()
 	{
 		return clock;

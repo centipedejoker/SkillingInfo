@@ -1139,13 +1139,21 @@ Farming remains a partial exception that happens to work either way — seeds ar
 
 **Phase 6** — Slayer; KPH; task loadouts; loot flow; trip support (activates the `tripBoundaries` field pre-wired in Phase 1).
 
-**Phase 7** — **UI design pass**; documentation; screenshots; tests; Plugin Hub release.
+**Phase 7** 🔨 — **UI design pass** implemented (pending live validation); documentation; screenshots; tests; Plugin Hub release.
 
 `[v7]` **The UI pass is a first-class Phase 7 deliverable, not polish-if-there's-time.** Up to this point the panel has accreted one section per phase with no design pass, and it shows. Deferring it to pre-release is a deliberate call (build features against a stable data model first, design once against the full picture) — but it is explicitly scheduled, and §59's release screenshots are gated on it. Scope, in priority order:
 
 1. **Item icons** — render actual item images per row (`ItemManager.getImage`), the way Loot Tracker and banked-experience do. Currently every item is plain grey text, which is the single biggest reason the panel reads as unfinished.
 2. **Visual hierarchy** — section dividers, distinct headers, deliberate use of weight and `ColorScheme` colour so the panel reads as structured rather than as one undifferentiated block.
 3. **Collapse/expand + per-skill summary** — the two long-standing backlog items: collapsible per-item detail (which is also where the full generated/dropped/repicked breakdown finally lives, rather than being permanently hidden), and an aggregate summary at the top of each skill's history.
+
+`[v7]` **Implemented from the design's six-state layout.** Structure: retention leads (the only figure with full contrast and a bar, placed above the rate table); paired stat tiles replace the label/value list, which is where the vertical saving comes from; item rows carry their game sprite; the projection block is demoted to the dimmest tier with an explicit "PROJECTED — NOT EARNED" header, a leading `~`, and its confidence stated, so nothing projected is ever bold or accented while every fact is one or the other.
+
+Two corrections to this spec that the implementation forced:
+- **There is no light theme to support.** RuneLite's `ColorScheme` is a fixed set of dark constants with no theme switch to respond to. §65's claim that the panel "must render correctly in both themes" was wrong, and the design brief inherited that error. The palette is centralised in one `Palette` class referencing `ColorScheme` where the tokens coincide, so a light variant is a one-file change if RuneLite ever gains theming.
+- **§65's "never a hardcoded hex" rule is kept via that class, not by using `ColorScheme` throughout.** The design's accent is deliberately brighter than `ColorScheme.BRAND_ORANGE` because here it carries meaning — it marks what the account kept, and nothing else — rather than decorating chrome. Each divergence is stated with its reason in `Palette`.
+
+Also now shown for the first time: §29's per-item lifecycle ledger (generated / picked up / dropped / repicked / consumed / banked / net retained), in the expanded history row. It has been tracked since Phase 2 and displayed nowhere.
 
 Out of scope for the pass unless the owner supplies artwork: the plugin's own `NavigationButton`/listing icon, still the placeholder "SI" circle drawn in code (§66).
 

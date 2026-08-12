@@ -17,8 +17,8 @@ import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JPanel;
 import net.runelite.api.Skill;
+import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.SkillIconManager;
-import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.PluginPanel;
 
 /**
@@ -50,7 +50,7 @@ public class SkillingInfoPanel extends PluginPanel
 	private Skill selectedSkill;
 	private Set<Skill> renderedSkills = new LinkedHashSet<>();
 
-	public SkillingInfoPanel(SessionManager sessionManager, SkillIconManager skillIconManager, ItemUseStore itemUseStore, Map<Integer, String> itemNames, LiveRates liveRates, BufferedImage pluginIcon)
+	public SkillingInfoPanel(SessionManager sessionManager, SkillIconManager skillIconManager, ItemUseStore itemUseStore, Map<Integer, String> itemNames, LiveRates liveRates, ItemManager itemManager, BufferedImage pluginIcon)
 	{
 		super(false);
 		this.sessionManager = sessionManager;
@@ -58,14 +58,15 @@ public class SkillingInfoPanel extends PluginPanel
 		this.currentIcon = new ImageIcon(pluginIcon);
 
 		setLayout(new BorderLayout());
+		setBackground(Palette.PANEL);
 
-		currentView = new CurrentView(sessionManager, itemUseStore, itemNames, liveRates, this::refresh);
-		historyView = new HistoryView(itemNames);
+		currentView = new CurrentView(sessionManager, itemUseStore, itemNames, liveRates, itemManager, skillIconManager, this::refresh);
+		historyView = new HistoryView(itemNames, itemManager);
 
 		cards.add(currentView, CURRENT_CARD);
 		cards.add(historyView, HISTORY_CARD);
 
-		tabBar.setBackground(ColorScheme.DARK_GRAY_COLOR);
+		tabBar.setBackground(Palette.PANEL);
 
 		currentButton = buildIconButton(currentIcon, "Current session");
 		currentButton.addActionListener(e -> selectSkill(null));
@@ -82,7 +83,7 @@ public class SkillingInfoPanel extends PluginPanel
 		JButton button = new JButton(icon);
 		button.setToolTipText(tooltip);
 		button.setPreferredSize(new Dimension(ICON_BUTTON_SIZE, ICON_BUTTON_SIZE));
-		button.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+		button.setBackground(Palette.TILE);
 		button.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2));
 		button.setFocusPainted(false);
 		button.setMargin(new java.awt.Insets(0, 0, 0, 0));
@@ -93,7 +94,7 @@ public class SkillingInfoPanel extends PluginPanel
 	{
 		selectedSkill = skill;
 		currentButton.setBorder(skill == null
-			? BorderFactory.createLineBorder(ColorScheme.BRAND_ORANGE, 2)
+			? BorderFactory.createLineBorder(Palette.ACCENT, 2)
 			: BorderFactory.createEmptyBorder(2, 2, 2, 2));
 		cardLayout.show(cards, skill == null ? CURRENT_CARD : HISTORY_CARD);
 		refresh();
@@ -121,7 +122,7 @@ public class SkillingInfoPanel extends PluginPanel
 			ImageIcon icon = new ImageIcon(skillIconManager.getSkillImage(skill, true));
 			JButton button = buildIconButton(icon, skill.getName());
 			button.setBorder(skill == selectedSkill
-				? BorderFactory.createLineBorder(ColorScheme.BRAND_ORANGE, 2)
+				? BorderFactory.createLineBorder(Palette.ACCENT, 2)
 				: BorderFactory.createEmptyBorder(2, 2, 2, 2));
 			button.addActionListener(e -> selectSkill(skill));
 			tabBar.add(button);

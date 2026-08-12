@@ -1,6 +1,5 @@
 package com.skillinginfo.ui;
 
-import com.skillinginfo.session.ActivityClassifier;
 import com.skillinginfo.session.ActivitySession;
 import com.skillinginfo.session.FutureXpResolver;
 import com.skillinginfo.session.ItemFlowEntry;
@@ -12,183 +11,373 @@ import com.skillinginfo.session.SessionManager;
 import com.skillinginfo.session.SessionState;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
+import java.awt.Color;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.GridLayout;
+import java.util.ArrayList;
 import java.util.Collection;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import javax.swing.BorderFactory;
-import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.DefaultComboBoxModel;
+import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.SwingConstants;
-import net.runelite.client.ui.ColorScheme;
+import net.runelite.client.game.ItemManager;
+import net.runelite.client.game.SkillIconManager;
 import net.runelite.client.ui.FontManager;
+import net.runelite.client.util.AsyncBufferedImage;
 
 /**
- * Renders the CURRENT tab's three states: idle (waiting for candidate
- * detection), prompted (Start/Ignore), and an active/paused session
- * (SPEC.md §6, §11). All text uses RuneLite's small UI font (§65) - a
- * ~225px sidebar has no room for default Swing/OS font sizes.
+ * The CURRENT tab: idle, detection prompt, and the running session
+ * (SPEC.md §6, §11), laid out to the Phase 7 design.
+ * <p>
+ * The organising idea of that design is that <b>retention leads</b>. It is the
+ * only figure given full contrast and a bar, and it sits above the rate table,
+ * because kept items are the product while XP/hour is table stakes that other
+ * plugins already show. Paired stat tiles replace the old label/value list,
+ * which is where most of the vertical saving comes from - the old screen
+ * pushed retention to row twelve, below the fold.
+ * <p>
+ * Rows are cached and only rebuilt when the set of displayed items changes.
+ * refresh() runs every game tick, and rebuilding destroyed the use-selector
+ * while the player was interacting with it.
  */
 class CurrentView extends JPanel
 {
 	private static final String IDLE_CARD = "IDLE";
 	private static final String PROMPT_CARD = "PROMPT";
 	private static final String SESSION_CARD = "SESSION";
-	private static final int BUTTON_HEIGHT = 24;
+	private static final int ITEM_ICON = 32;
+	private static final int SKILL_ICON = 20;
 
 	private final SessionManager sessionManager;
 	private final ItemUseStore itemUseStore;
 	private final Map<Integer, String> itemNames;
 	private final LiveRates liveRates;
+	private final ItemManager itemManager;
+	private final SkillIconManager skillIconManager;
 	private final Runnable onAction;
 
 	private final CardLayout cardLayout = new CardLayout();
 	private final JPanel cards = new JPanel(cardLayout);
 
-	private final JLabel promptTitle = new JLabel();
-	private final JLabel promptBody = new JLabel();
+	private final JLabel promptTitle = Ui.bold("", Palette.TEXT);
+	private final JLabel promptDetail = Ui.dim("");
+	private final JLabel promptIcon = new JLabel();
+	private final Ui.Bar promptCountdown = new Ui.Bar(2);
+	private final JLabel promptFootnote = Ui.label("", FontManager.getRunescapeSmallFont(), Palette.DIMMEST);
 
-	private final JLabel skillLabel = new JLabel();
-	private final JLabel activityLabel = new JLabel();
-	private final JLabel totalTimeValue = new JLabel();
-	private final JLabel activeTimeValue = new JLabel();
-	private final JLabel idleTimeValue = new JLabel();
-	private final JLabel xpValue = new JLabel();
-	private final JLabel activeRateValue = new JLabel();
-	private final JLabel overallRateValue = new JLabel();
-	private final JLabel producedLabel = new JLabel();
-	private final JLabel producedValue = new JLabel();
-	private final JLabel producedRateLabel = new JLabel();
-	private final JLabel producedRateValue = new JLabel();
-	private final JLabel actionsLabel = new JLabel();
-	private final JLabel actionsValue = new JLabel();
-	private final JLabel actionsRateLabel = new JLabel();
-	private final JLabel actionsRateValue = new JLabel();
-	private final JLabel retentionLabel = new JLabel();
-	private final JLabel retentionValue = new JLabel();
-	private final JButton pauseResumeButton = smallButton("Pause");
-	private final JPanel itemFlowPanel = new JPanel();
-	private final JPanel futureXpPanel = new JPanel();
+	private final JLabel headerIcon = new JLabel();
+	private final JLabel skillLabel = Ui.bold("", Palette.TEXT);
+	private final JLabel activityLabel = Ui.dim("");
+	private final JLabel totalTimeLabel = Ui.bold("", Palette.TEXT);
+	private final JLabel statusLabel = Ui.label("", FontManager.getRunescapeSmallFont(), Palette.ACCENT);
 
-	// Rows are cached and reused across refreshes. refresh() runs every
-	// game tick, and tearing the panel down each time destroyed the use
-	// selectors while the player was interacting with them - the dropdown
-	// would close on open and appear to ignore clicks. Only rebuild when
-	// the set of displayed items actually changes; otherwise just retext
-	// the existing labels. (Same guard as SkillingInfoPanel's tab bar.)
-	private final Map<Integer, JLabel> itemLines = new LinkedHashMap<>();
+	private final JPanel pausedBand = new JPanel(new BorderLayout());
+	private final JLabel pausedDetail = Ui.dim("");
+
+	private final JPanel retentionBlock = new JPanel();
+	private final JLabel retentionCaption = Ui.label("RETAINED", FontManager.getRunescapeSmallFont(), Palette.DIM);
+	private final JLabel retentionValue = Ui.bold("", Palette.TEXT);
+	private final Ui.Bar retentionBar = new Ui.Bar(6);
+	private final JLabel keptLabel = Ui.dim("");
+	private final JLabel lostLabel = Ui.dim("");
+
+	private final JPanel outputPanel = new JPanel();
 	private Set<Integer> renderedItemIds = new LinkedHashSet<>();
+	private final List<ItemRow> itemRows = new ArrayList<>();
 
-	CurrentView(SessionManager sessionManager, ItemUseStore itemUseStore, Map<Integer, String> itemNames, LiveRates liveRates, Runnable onAction)
+	private final JLabel activeValue = Ui.bold("", Palette.TEXT);
+	private final JLabel idleValue = Ui.bold("", Palette.DIM);
+	private final JLabel xpValue = Ui.bold("", Palette.TEXT);
+	private final JLabel xpHrValue = Ui.bold("", Palette.TEXT);
+	private final JLabel actionsValue = Ui.bold("", Palette.TEXT);
+	private final JLabel actionsHrValue = Ui.bold("", Palette.TEXT);
+	private final JPanel actionsRow;
+	private final JLabel overflowLine = Ui.label("", FontManager.getRunescapeSmallFont(), Palette.DIMMEST);
+
+	private final JPanel projectionPanel = new JPanel();
+
+	private final JButton pauseResumeButton = flatButton("Pause", false);
+	private final JButton stopButton = flatButton("Stop", false);
+
+	private static final class ItemRow
+	{
+		final int itemId;
+		final JLabel name;
+		final JLabel sub;
+		final JLabel net;
+
+		ItemRow(int itemId, JLabel name, JLabel sub, JLabel net)
+		{
+			this.itemId = itemId;
+			this.name = name;
+			this.sub = sub;
+			this.net = net;
+		}
+	}
+
+	CurrentView(SessionManager sessionManager, ItemUseStore itemUseStore, Map<Integer, String> itemNames,
+		LiveRates liveRates, ItemManager itemManager, SkillIconManager skillIconManager, Runnable onAction)
 	{
 		this.sessionManager = sessionManager;
 		this.itemUseStore = itemUseStore;
 		this.itemNames = itemNames;
 		this.liveRates = liveRates;
+		this.itemManager = itemManager;
+		this.skillIconManager = skillIconManager;
 		this.onAction = onAction;
 
+		this.actionsRow = Ui.tileRow(
+			Ui.tile("ACTIONS", actionsValue, false),
+			Ui.tile("ACTIONS/HR", actionsHrValue, false));
+
 		setLayout(new BorderLayout());
+		setBackground(Palette.PANEL);
+		cards.setBackground(Palette.PANEL);
+
 		cards.add(buildIdleCard(), IDLE_CARD);
 		cards.add(buildPromptCard(), PROMPT_CARD);
 		cards.add(buildSessionCard(), SESSION_CARD);
 		add(cards, BorderLayout.CENTER);
 	}
 
-	private static JButton smallButton(String text)
+	// ------------------------------------------------------------------
+	// Construction
+	// ------------------------------------------------------------------
+
+	private static JButton flatButton(String text, boolean primary)
 	{
-		JButton button = new JButton(text);
-		button.setFont(FontManager.getRunescapeSmallFont());
-		button.setPreferredSize(new Dimension(0, BUTTON_HEIGHT));
-		button.setMargin(new java.awt.Insets(0, 2, 0, 2));
-		return button;
+		JButton b = new JButton(text);
+		b.setBackground(Palette.PANEL);
+		b.setFocusPainted(false);
+		b.setMargin(new java.awt.Insets(0, 0, 0, 0));
+		restyleButton(b, primary);
+		return b;
+	}
+
+	private static void restyleButton(JButton b, boolean primary)
+	{
+		b.setFont(primary ? FontManager.getRunescapeBoldFont() : FontManager.getRunescapeSmallFont());
+		b.setForeground(primary ? Palette.ACCENT : Palette.TEXT);
+		b.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createLineBorder(primary ? Palette.ACCENT : Palette.BORDER),
+			BorderFactory.createEmptyBorder(4, 0, 4, 0)));
+	}
+
+	private static JLabel iconHolder(int size)
+	{
+		JLabel l = new JLabel();
+		Dimension d = new Dimension(size, size);
+		l.setPreferredSize(d);
+		l.setMinimumSize(d);
+		l.setMaximumSize(d);
+		l.setOpaque(true);
+		l.setBackground(Palette.WELL);
+		l.setBorder(BorderFactory.createLineBorder(Palette.BORDER));
+		return l;
+	}
+
+	private static JPanel alignRight(Component c)
+	{
+		JPanel p = new JPanel(new BorderLayout());
+		p.setOpaque(false);
+		p.add(c, BorderLayout.EAST);
+		return p;
+	}
+
+	private JPanel column()
+	{
+		JPanel p = new JPanel();
+		p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
+		p.setBackground(Palette.PANEL);
+		return p;
+	}
+
+	/** Keeps content pinned to the top instead of centring in leftover space. */
+	private JPanel wrapTop(JPanel content)
+	{
+		JPanel wrapper = new JPanel(new BorderLayout());
+		wrapper.setBackground(Palette.PANEL);
+		wrapper.add(content, BorderLayout.NORTH);
+		return wrapper;
+	}
+
+	private JPanel plainHeader()
+	{
+		JPanel head = new JPanel(new BorderLayout());
+		head.setBackground(Palette.PANEL);
+		head.setBorder(BorderFactory.createEmptyBorder(0, 0, 5, 0));
+		head.add(Ui.bold("Skilling Info", Palette.TEXT), BorderLayout.WEST);
+		head.add(alignRight(Ui.dim("watching")), BorderLayout.EAST);
+		return Ui.fixHeight(head);
 	}
 
 	private JPanel buildIdleCard()
 	{
-		JPanel panel = new JPanel(new BorderLayout());
-		JLabel label = new JLabel("<html><center>No activity detected.<br/>Keep playing - Skilling Info will<br/>prompt you when it recognises<br/>a repeated activity.</center></html>", SwingConstants.CENTER);
-		label.setFont(FontManager.getRunescapeSmallFont());
-		label.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-		panel.add(label, BorderLayout.CENTER);
-		return panel;
+		JPanel p = column();
+		p.add(plainHeader());
+		p.add(Ui.rule(Palette.BORDER));
+
+		JLabel copy = Ui.label(
+			"<html><body style='width:195px'>Nothing worth tracking yet.<br><br>"
+				+ "Keep playing. When the same activity repeats long enough to measure, "
+				+ "you'll get one offer to start a session.</body></html>",
+			FontManager.getRunescapeSmallFont(), Palette.DIM);
+		copy.setBorder(BorderFactory.createEmptyBorder(12, 2, 12, 2));
+		p.add(Ui.fixHeight(copy));
+
+		return wrapTop(p);
 	}
 
 	private JPanel buildPromptCard()
 	{
-		JPanel panel = new JPanel();
-		panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-		panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+		JPanel p = column();
+		p.add(plainHeader());
+		p.add(Ui.rule(Palette.BORDER));
+		p.add(Ui.gap(8));
 
-		promptTitle.setFont(FontManager.getRunescapeBoldFont());
-		promptTitle.setAlignmentX(CENTER_ALIGNMENT);
-		promptBody.setFont(FontManager.getRunescapeSmallFont());
-		promptBody.setAlignmentX(CENTER_ALIGNMENT);
-		promptBody.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+		// The plugin's only interruption, so it is deliberately a quiet
+		// offer: it sits in the panel's normal flow with no colour fill and
+		// no badge. The only accent is the Start button's outline.
+		JPanel box = new JPanel();
+		box.setLayout(new BoxLayout(box, BoxLayout.Y_AXIS));
+		box.setBackground(Palette.TILE);
+		box.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createLineBorder(Palette.BORDER),
+			BorderFactory.createEmptyBorder(6, 6, 6, 6)));
 
-		JButton startButton = smallButton("Start");
-		JButton ignoreButton = smallButton("Ignore");
-		startButton.addActionListener(e -> {
+		JPanel titleRow = new JPanel(new BorderLayout(6, 0));
+		titleRow.setOpaque(false);
+		promptIcon.setPreferredSize(new Dimension(SKILL_ICON, SKILL_ICON));
+		titleRow.add(promptIcon, BorderLayout.WEST);
+		titleRow.add(promptTitle, BorderLayout.CENTER);
+		box.add(Ui.fixHeight(titleRow));
+
+		promptDetail.setBorder(BorderFactory.createEmptyBorder(4, 26, 7, 0));
+		box.add(Ui.fixHeight(promptDetail));
+
+		JButton start = flatButton("Start", true);
+		JButton ignore = flatButton("Ignore", false);
+		start.addActionListener(e -> {
 			sessionManager.start();
 			onAction.run();
 		});
-		ignoreButton.addActionListener(e -> {
+		ignore.addActionListener(e -> {
 			sessionManager.ignore();
 			onAction.run();
 		});
+		JPanel buttons = new JPanel(new GridLayout(1, 2, 4, 0));
+		buttons.setOpaque(false);
+		buttons.add(start);
+		buttons.add(ignore);
+		box.add(Ui.fixHeight(buttons));
 
-		JPanel buttons = new JPanel(new GridLayout(1, 2, 5, 0));
-		buttons.add(startButton);
-		buttons.add(ignoreButton);
-		buttons.setAlignmentX(CENTER_ALIGNMENT);
+		box.add(Ui.gap(6));
+		box.add(promptCountdown);
+		p.add(Ui.fixHeight(box));
 
-		panel.add(promptTitle);
-		panel.add(Box.createVerticalStrut(8));
-		panel.add(promptBody);
-		panel.add(Box.createVerticalStrut(12));
-		panel.add(buttons);
-		return panel;
+		promptFootnote.setBorder(BorderFactory.createEmptyBorder(10, 2, 0, 2));
+		p.add(Ui.fixHeight(promptFootnote));
+
+		return wrapTop(p);
 	}
 
 	private JPanel buildSessionCard()
 	{
-		JPanel panel = new JPanel();
-		panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-		panel.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+		JPanel p = column();
 
-		skillLabel.setFont(FontManager.getRunescapeBoldFont());
-		activityLabel.setFont(FontManager.getRunescapeSmallFont());
-		activityLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+		JPanel head = new JPanel(new BorderLayout(6, 0));
+		head.setBackground(Palette.PANEL);
+		head.setBorder(BorderFactory.createEmptyBorder(0, 0, 5, 0));
 
-		JPanel stats = new JPanel(new GridLayout(0, 2, 4, 2));
-		stats.setBorder(BorderFactory.createEmptyBorder(8, 0, 8, 0));
-		addStatRow(stats, "Total", totalTimeValue);
-		addStatRow(stats, "Active", activeTimeValue);
-		addStatRow(stats, "Idle", idleTimeValue);
-		addStatRow(stats, "XP", xpValue);
-		addStatRow(stats, "Active XP/hr", activeRateValue);
-		addStatRow(stats, "Overall XP/hr", overallRateValue);
-		// SPEC.md §40's per-activity outputs. Labels are set at refresh
-		// time because the noun depends on the skill ("Logs" vs "Catches").
-		addStatRow(stats, producedLabel, producedValue);
-		addStatRow(stats, producedRateLabel, producedRateValue);
-		addStatRow(stats, actionsLabel, actionsValue);
-		addStatRow(stats, actionsRateLabel, actionsRateValue);
-		addStatRow(stats, retentionLabel, retentionValue);
+		headerIcon.setPreferredSize(new Dimension(SKILL_ICON, SKILL_ICON));
+		head.add(headerIcon, BorderLayout.WEST);
 
-		itemFlowPanel.setLayout(new BoxLayout(itemFlowPanel, BoxLayout.Y_AXIS));
-		itemFlowPanel.setBorder(BorderFactory.createEmptyBorder(4, 0, 4, 0));
+		JPanel identity = new JPanel();
+		identity.setLayout(new BoxLayout(identity, BoxLayout.Y_AXIS));
+		identity.setOpaque(false);
+		identity.add(skillLabel);
+		identity.add(activityLabel);
+		head.add(identity, BorderLayout.CENTER);
 
-		futureXpPanel.setLayout(new BoxLayout(futureXpPanel, BoxLayout.Y_AXIS));
-		futureXpPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 8, 0));
+		JPanel clock = new JPanel();
+		clock.setLayout(new BoxLayout(clock, BoxLayout.Y_AXIS));
+		clock.setOpaque(false);
+		totalTimeLabel.setAlignmentX(Component.RIGHT_ALIGNMENT);
+		statusLabel.setAlignmentX(Component.RIGHT_ALIGNMENT);
+		clock.add(totalTimeLabel);
+		clock.add(statusLabel);
+		head.add(clock, BorderLayout.EAST);
+
+		p.add(Ui.fixHeight(head));
+		p.add(Ui.rule(Palette.BORDER));
+
+		pausedBand.setBackground(Palette.WELL);
+		pausedBand.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createMatteBorder(0, 3, 0, 0, Palette.ACCENT),
+			BorderFactory.createEmptyBorder(5, 6, 5, 6)));
+		pausedBand.add(Ui.bold("PAUSED", Palette.ACCENT), BorderLayout.WEST);
+		pausedBand.add(alignRight(pausedDetail), BorderLayout.EAST);
+		pausedBand.setVisible(false);
+		p.add(Ui.gap(6));
+		p.add(Ui.fixHeight(pausedBand));
+
+		retentionBlock.setLayout(new BoxLayout(retentionBlock, BoxLayout.Y_AXIS));
+		retentionBlock.setBackground(Palette.TILE);
+		retentionBlock.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createLineBorder(Palette.BORDER),
+			BorderFactory.createEmptyBorder(6, 6, 6, 6)));
+
+		JPanel retentionTop = new JPanel(new BorderLayout());
+		retentionTop.setOpaque(false);
+		retentionTop.add(retentionCaption, BorderLayout.WEST);
+		retentionTop.add(alignRight(retentionValue), BorderLayout.EAST);
+		retentionBlock.add(Ui.fixHeight(retentionTop));
+		retentionBlock.add(Ui.gap(5));
+		retentionBlock.add(retentionBar);
+		retentionBlock.add(Ui.gap(4));
+
+		JPanel keptLost = new JPanel(new BorderLayout());
+		keptLost.setOpaque(false);
+		keptLost.add(keptLabel, BorderLayout.WEST);
+		keptLost.add(alignRight(lostLabel), BorderLayout.EAST);
+		retentionBlock.add(Ui.fixHeight(keptLost));
+
+		p.add(Ui.gap(6));
+		p.add(Ui.fixHeight(retentionBlock));
+
+		p.add(Ui.gap(6));
+		p.add(Ui.band("OUTPUT"));
+		outputPanel.setLayout(new BoxLayout(outputPanel, BoxLayout.Y_AXIS));
+		outputPanel.setBackground(Palette.PANEL);
+		outputPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		p.add(outputPanel);
+
+		p.add(Ui.gap(6));
+		p.add(Ui.band("SESSION"));
+		p.add(Ui.gap(3));
+		p.add(Ui.tileRow(Ui.tile("ACTIVE", activeValue, false), Ui.tile("IDLE", idleValue, false)));
+		p.add(Ui.gap(3));
+		p.add(Ui.tileRow(Ui.tile("XP", xpValue, false), Ui.tile("XP/HR", xpHrValue, false)));
+		p.add(Ui.gap(3));
+		p.add(actionsRow);
+
+		overflowLine.setBorder(BorderFactory.createEmptyBorder(5, 2, 0, 2));
+		p.add(Ui.fixHeight(overflowLine));
+
+		projectionPanel.setLayout(new BoxLayout(projectionPanel, BoxLayout.Y_AXIS));
+		projectionPanel.setBackground(Palette.PANEL);
+		projectionPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		p.add(Ui.gap(8));
+		p.add(projectionPanel);
 
 		pauseResumeButton.addActionListener(e -> {
 			if (sessionManager.getState() == SessionState.ACTIVE)
@@ -201,41 +390,23 @@ class CurrentView extends JPanel
 			}
 			onAction.run();
 		});
-
-		JButton stopButton = smallButton("Stop Session");
 		stopButton.addActionListener(e -> {
 			sessionManager.stop();
 			onAction.run();
 		});
+		JPanel controls = new JPanel(new GridLayout(1, 2, 4, 0));
+		controls.setOpaque(false);
+		controls.add(pauseResumeButton);
+		controls.add(stopButton);
+		p.add(Ui.gap(8));
+		p.add(Ui.fixHeight(controls));
 
-		JPanel buttons = new JPanel(new GridLayout(1, 2, 5, 0));
-		buttons.add(pauseResumeButton);
-		buttons.add(stopButton);
-
-		panel.add(skillLabel);
-		panel.add(activityLabel);
-		panel.add(stats);
-		panel.add(itemFlowPanel);
-		panel.add(futureXpPanel);
-		panel.add(Box.createVerticalGlue());
-		panel.add(buttons);
-		return panel;
+		return wrapTop(p);
 	}
 
-	private void addStatRow(JPanel stats, String label, JLabel value)
-	{
-		addStatRow(stats, new JLabel(label), value);
-	}
-
-	private void addStatRow(JPanel stats, JLabel labelComponent, JLabel value)
-	{
-		labelComponent.setFont(FontManager.getRunescapeSmallFont());
-		labelComponent.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-		value.setFont(FontManager.getRunescapeSmallFont());
-		value.setHorizontalAlignment(SwingConstants.RIGHT);
-		stats.add(labelComponent);
-		stats.add(value);
-	}
+	// ------------------------------------------------------------------
+	// Refresh
+	// ------------------------------------------------------------------
 
 	void refresh()
 	{
@@ -243,17 +414,9 @@ class CurrentView extends JPanel
 		switch (state)
 		{
 			case PROMPTED:
-			{
-				PromptSummary prompt = sessionManager.getPendingPrompt();
-				if (prompt != null)
-				{
-					promptTitle.setText(prompt.getSkill().getName() + " activity detected");
-					promptBody.setText("<html><center>" + prompt.getDropCount() + " XP drops<br/>"
-						+ prompt.getElapsedSeconds() + " seconds<br/>+" + prompt.getTotalXp() + " XP</center></html>");
-				}
+				refreshPrompt();
 				cardLayout.show(cards, PROMPT_CARD);
 				break;
-			}
 			case ACTIVE:
 			case PAUSED:
 			{
@@ -263,33 +426,7 @@ class CurrentView extends JPanel
 					cardLayout.show(cards, IDLE_CARD);
 					break;
 				}
-				skillLabel.setText(session.getSkill().getName());
-				activityLabel.setText(session.getActivity());
-
-				long total = sessionManager.getClock().getTotalSeconds();
-				long active = sessionManager.getClock().getActiveSeconds();
-				long idle = sessionManager.getClock().getIdleSeconds();
-				int xp = session.getXpGained(session.getSkill());
-
-				totalTimeValue.setText(formatDuration(total));
-				activeTimeValue.setText(formatDuration(active));
-				idleTimeValue.setText(formatDuration(idle));
-				xpValue.setText("+" + xp);
-				// SPEC.md §5 / §14 [v7]: live rates come from RuneLite's own XP
-				// Tracker rather than being recomputed here. Note these follow
-				// XP Tracker's session, not ours - resetting it mid-session
-				// resets these figures. History is unaffected: completed
-				// sessions still derive their rates from persisted raw data,
-				// which is the only way they stay reproducible (§34).
-				activeRateValue.setText(String.format("%,d", liveRates.getXpPerHour()));
-				overallRateValue.setText(formatRate(xp, total));
-				pauseResumeButton.setText(state == SessionState.ACTIVE ? "Pause" : "Resume");
-
-				refreshActivityOutputs(session, active);
-
-				refreshItemFlow(session.getItemFlow());
-				refreshFutureXp(session);
-
+				refreshSession(session, state == SessionState.PAUSED);
 				cardLayout.show(cards, SESSION_CARD);
 				break;
 			}
@@ -299,21 +436,115 @@ class CurrentView extends JPanel
 		}
 	}
 
-	/**
-	 * SPEC.md §11/§29 OUTPUT section - one compact line per item acquired
-	 * this session, from either channel (direct skilling output or ground
-	 * pickup - §20a). Gated on directlyAcquired, not generated, so a
-	 * pickup-only item (no matching same-tick XP) still shows up.
-	 * <p>
-	 * `[v7]` Net retained only, not the full generated/dropped breakdown -
-	 * nobody needs "what I dropped" at a glance, only what they ended up
-	 * with; the full breakdown is backlog for the expandable detail view
-	 * (SPEC.md §65). This also keeps each item to one line, since the
-	 * two-line/multi-stat version was overflowing the sidebar's width.
-	 */
-	private void refreshItemFlow(Collection<ItemFlowEntry> entries)
+	private void refreshPrompt()
 	{
-		List<ItemFlowEntry> visible = new java.util.ArrayList<>();
+		PromptSummary prompt = sessionManager.getPendingPrompt();
+		if (prompt == null)
+		{
+			return;
+		}
+		promptTitle.setText(prompt.getSkill().getName() + " detected");
+		promptDetail.setText(String.format("%d XP drops · %ds · +%,d XP",
+			prompt.getDropCount(), prompt.getElapsedSeconds(), prompt.getTotalXp()));
+		promptFootnote.setText("Ignoring hides " + prompt.getSkill().getName() + " prompts for a while.");
+		promptIcon.setIcon(new ImageIcon(skillIconManager.getSkillImage(prompt.getSkill(), true)));
+		promptCountdown.set(sessionManager.getPromptRemainingFraction(), Palette.BORDER, null, Palette.WELL);
+	}
+
+	/**
+	 * Paused is the whole panel one step down in contrast plus a hard band -
+	 * not just a button label change, which tested as too subtle to notice.
+	 * The only full-strength element left is Resume.
+	 */
+	private void refreshSession(ActivitySession session, boolean paused)
+	{
+		Color primary = paused ? Palette.DIM : Palette.TEXT;
+		Color secondary = paused ? Palette.DIMMEST : Palette.DIM;
+
+		if (session.getSkill() != null)
+		{
+			headerIcon.setIcon(new ImageIcon(skillIconManager.getSkillImage(session.getSkill(), true)));
+			skillLabel.setText(session.getSkill().getName());
+		}
+		skillLabel.setForeground(primary);
+		activityLabel.setText(session.getActivity());
+		activityLabel.setForeground(secondary);
+
+		long total = sessionManager.getClock().getTotalSeconds();
+		long active = sessionManager.getClock().getActiveSeconds();
+		long idle = sessionManager.getClock().getIdleSeconds();
+		int xp = session.getXpGained(session.getSkill());
+
+		totalTimeLabel.setText(formatDuration(total));
+		totalTimeLabel.setForeground(paused ? Palette.DIMMEST : Palette.TEXT);
+		statusLabel.setText(paused ? "" : "RECORDING");
+
+		pausedBand.setVisible(paused);
+		if (paused)
+		{
+			pausedDetail.setText(formatShort(idle) + " · not counted");
+		}
+
+		double retention = session.getRetentionRate();
+		boolean hasRetention = retention >= 0;
+		retentionBlock.setVisible(hasRetention);
+		if (hasRetention)
+		{
+			int generated = session.getTotalGenerated();
+			int kept = session.getTotalNetRetained();
+			retentionValue.setText(String.format("%.1f%%", retention * 100));
+			retentionValue.setForeground(paused ? Palette.DIM : Palette.TEXT);
+			retentionCaption.setForeground(secondary);
+			retentionBar.set(retention,
+				paused ? Palette.ACCENT_MUTED : Palette.ACCENT,
+				null,
+				paused ? Palette.BORDER_PAUSED : Palette.BORDER);
+			keptLabel.setText(String.format("%,d kept", kept));
+			keptLabel.setForeground(secondary);
+			lostLabel.setText(String.format("%,d lost", Math.max(0, generated - kept)));
+			lostLabel.setForeground(secondary);
+		}
+
+		refreshItemFlow(session.getItemFlow(), paused);
+
+		activeValue.setText(formatDuration(active));
+		activeValue.setForeground(primary);
+		idleValue.setText(formatDuration(idle));
+		idleValue.setForeground(secondary);
+		xpValue.setText(String.format("+%,d", xp));
+		xpValue.setForeground(primary);
+		xpHrValue.setText(String.format("%,d", liveRates.getXpPerHour()));
+		xpHrValue.setForeground(primary);
+
+		// §40's actions pair. The design drops the duplicate "Logs / Logs per
+		// hour" pair entirely, since it repeats this in almost every session.
+		int actions = liveRates.getActions();
+		actionsRow.setVisible(actions > 0);
+		if (actions > 0)
+		{
+			actionsValue.setText(String.format("%,d", actions));
+			actionsValue.setForeground(primary);
+			actionsHrValue.setText(String.format("%,d", liveRates.getActionsPerHour()));
+			actionsHrValue.setForeground(primary);
+		}
+
+		overflowLine.setText(String.format("Total %s · overall %,d/hr",
+			formatDuration(total), total > 0 ? Math.round(xp / (double) total * 3600) : 0));
+
+		refreshProjection(session);
+
+		pauseResumeButton.setText(paused ? "Resume" : "Pause");
+		restyleButton(pauseResumeButton, paused);
+	}
+
+	/**
+	 * One row per item acquired, with its game sprite. Gated on
+	 * directlyAcquired rather than generated so a pickup-only item still
+	 * appears.
+	 */
+	private void refreshItemFlow(Collection<ItemFlowEntry> entries, boolean paused)
+	{
+		List<ItemFlowEntry> visible = new ArrayList<>();
 		Set<Integer> visibleIds = new LinkedHashSet<>();
 		for (ItemFlowEntry entry : entries)
 		{
@@ -329,70 +560,108 @@ class CurrentView extends JPanel
 			rebuildItemFlow(visible, visibleIds);
 		}
 
-		// cheap path: the rows already exist, just update their numbers
 		for (ItemFlowEntry entry : visible)
 		{
-			JLabel line = itemLines.get(entry.getItemId());
-			if (line != null)
+			for (ItemRow row : itemRows)
 			{
-				String name = itemNames.getOrDefault(entry.getItemId(), "Item #" + entry.getItemId());
-				String text = ItemFlowFormat.line(name, entry);
-				if (!text.equals(line.getText()))
+				if (row.itemId != entry.getItemId())
 				{
-					line.setText(text);
+					continue;
 				}
+				row.name.setText(itemNames.getOrDefault(entry.getItemId(), "Item #" + entry.getItemId()));
+				row.name.setForeground(paused ? Palette.DIM : Palette.TEXT);
+				row.sub.setText(subLine(entry));
+				row.sub.setForeground(paused ? Palette.DIMMEST : Palette.DIM);
+				row.net.setText(String.format("+%,d", entry.getNetRetained()));
+				row.net.setForeground(paused ? Palette.ACCENT_MUTED : Palette.ACCENT);
 			}
 		}
+	}
+
+	private static String subLine(ItemFlowEntry entry)
+	{
+		int held = Math.max(0, entry.getNetRetained() - entry.getBanked());
+		if (entry.getBanked() > 0 && held > 0)
+		{
+			return String.format("%,d banked · %,d held", entry.getBanked(), held);
+		}
+		if (entry.getBanked() > 0)
+		{
+			return String.format("%,d banked", entry.getBanked());
+		}
+		return String.format("%,d held", held);
 	}
 
 	private void rebuildItemFlow(List<ItemFlowEntry> visible, Set<Integer> visibleIds)
 	{
 		renderedItemIds = visibleIds;
-		itemLines.clear();
-		itemFlowPanel.removeAll();
+		itemRows.clear();
+		outputPanel.removeAll();
 
 		for (ItemFlowEntry entry : visible)
 		{
-			String name = itemNames.getOrDefault(entry.getItemId(), "Item #" + entry.getItemId());
+			JPanel row = new JPanel(new BorderLayout(6, 0));
+			row.setBackground(Palette.PANEL);
+			row.setBorder(BorderFactory.createCompoundBorder(
+				BorderFactory.createMatteBorder(0, 0, 1, 0, Palette.ROW_RULE),
+				BorderFactory.createEmptyBorder(5, 2, 5, 2)));
 
-			JLabel line = new JLabel(ItemFlowFormat.line(name, entry));
-			line.setFont(FontManager.getRunescapeSmallFont());
-			itemLines.put(entry.getItemId(), line);
-			itemFlowPanel.add(line);
+			JLabel icon = iconHolder(ITEM_ICON);
+			// AsyncBufferedImage loads off-thread and repaints the label
+			// itself - the pattern LootTrackerBox uses, and why this is safe
+			// here when getItemComposition is not.
+			AsyncBufferedImage image = itemManager.getImage(entry.getItemId());
+			if (image != null)
+			{
+				image.addTo(icon);
+			}
+			row.add(icon, BorderLayout.WEST);
 
-			// only items with a genuine decision get a selector - a
-			// dropdown on every row would be the clutter §65 warns about
+			JLabel name = Ui.body("");
+			JLabel sub = Ui.dim("");
+			JPanel text = new JPanel();
+			text.setLayout(new BoxLayout(text, BoxLayout.Y_AXIS));
+			text.setOpaque(false);
+			text.add(name);
+			text.add(sub);
+			row.add(text, BorderLayout.CENTER);
+
+			JLabel net = Ui.bold("", Palette.ACCENT);
+			row.add(alignRight(net), BorderLayout.EAST);
+
+			outputPanel.add(Ui.fixHeight(row));
+			itemRows.add(new ItemRow(entry.getItemId(), name, sub, net));
+
 			if (FutureXpResolver.hasChoice(entry.getItemId()))
 			{
-				itemFlowPanel.add(buildUseSelector(entry.getItemId()));
+				outputPanel.add(buildUseSelector(entry.getItemId()));
 			}
 		}
 
-		itemFlowPanel.revalidate();
-		itemFlowPanel.repaint();
+		outputPanel.revalidate();
+		outputPanel.repaint();
 	}
 
 	/**
-	 * Inline per-item future-XP selector (SPEC.md §33/§35). Lives next to
-	 * the item rather than in the RuneLite config screen: the set of
-	 * choosable items isn't known ahead of time, and the choice only makes
-	 * sense in the context of the item it applies to - the same reasoning
-	 * banked-experience uses for its per-item activity picker (§5).
+	 * Inline per-item use selector (§33/§35), indented under its item so the
+	 * association is positional rather than needing a label.
 	 */
-	private JComboBox<ItemUse> buildUseSelector(int itemId)
+	private JPanel buildUseSelector(int itemId)
 	{
 		List<ItemUse> options = FutureXpResolver.getSelectableUses(itemId);
 		JComboBox<ItemUse> combo = new JComboBox<>(new DefaultComboBoxModel<>(options.toArray(new ItemUse[0])));
 		combo.setFont(FontManager.getRunescapeSmallFont());
+		combo.setForeground(Palette.TEXT);
+		combo.setBackground(Palette.TILE);
 		combo.setSelectedItem(itemUseStore.get(itemId));
-		combo.setMaximumSize(new Dimension(Integer.MAX_VALUE, BUTTON_HEIGHT));
 		combo.setRenderer((list, value, index, selected, focused) -> {
-			JLabel label = new JLabel(value == null ? "" : value.label);
-			label.setFont(FontManager.getRunescapeSmallFont());
-			label.setOpaque(true);
-			label.setBackground(selected ? ColorScheme.DARKER_GRAY_HOVER_COLOR : ColorScheme.DARKER_GRAY_COLOR);
-			label.setForeground(ColorScheme.TEXT_COLOR);
-			return label;
+			JLabel l = new JLabel(value == null ? "" : value.label);
+			l.setFont(FontManager.getRunescapeSmallFont());
+			l.setOpaque(true);
+			l.setBackground(selected ? Palette.BORDER : Palette.TILE);
+			l.setForeground(Palette.TEXT);
+			l.setBorder(BorderFactory.createEmptyBorder(1, 3, 1, 3));
+			return l;
 		});
 		combo.addActionListener(e -> {
 			ItemUse chosen = (ItemUse) combo.getSelectedItem();
@@ -402,111 +671,91 @@ class CurrentView extends JPanel
 				onAction.run();
 			}
 		});
-		return combo;
+
+		JPanel wrapper = new JPanel(new BorderLayout(4, 0));
+		wrapper.setBackground(Palette.PANEL);
+		wrapper.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createMatteBorder(0, 0, 1, 0, Palette.ROW_RULE),
+			BorderFactory.createEmptyBorder(0, 40, 5, 2)));
+		wrapper.add(Ui.label("use", FontManager.getRunescapeSmallFont(), Palette.DIMMEST), BorderLayout.WEST);
+		wrapper.add(combo, BorderLayout.CENTER);
+		return Ui.fixHeight(wrapper);
 	}
 
 	/**
-	 * SPEC.md §40's per-activity outputs: units produced, units/hour, and
-	 * retention (§32). Rows hide themselves when there's nothing to show,
-	 * so a session that hasn't produced anything - or a skill with no
-	 * item output at all - doesn't display empty stats.
+	 * SPEC.md §33: a projection must never be mistaken for an earned fact.
+	 * It gets the dimmest tier, no bold, no accent, a leading tilde, an
+	 * explicit "not earned" header, and its confidence stated. Everything
+	 * factual on this panel is bold or orange; nothing projected ever is.
 	 */
-	private void refreshActivityOutputs(ActivitySession session, long activeSeconds)
+	private void refreshProjection(ActivitySession session)
 	{
-		int produced = session.getTotalGenerated();
-		boolean show = produced > 0;
-
-		producedLabel.setVisible(show);
-		producedValue.setVisible(show);
-		producedRateLabel.setVisible(show);
-		producedRateValue.setVisible(show);
-
-		if (show)
-		{
-			String noun = ActivityClassifier.outputNoun(session.getSkill());
-			producedLabel.setText(noun);
-			producedValue.setText(String.format("%,d", produced));
-
-			producedRateLabel.setText(noun + "/hr");
-			producedRateValue.setText(activeSeconds > 0
-				? String.format("%,d", Math.round(produced / (double) activeSeconds * 3600))
-				: "0");
-		}
-
-		// Actions come from XP Tracker too, and unlike our item counts they
-		// work for skills that produce nothing at all (Agility laps,
-		// Thieving pickpockets) - previously those had no action figure.
-		int actions = liveRates.getActions();
-		boolean showActions = actions > 0;
-		actionsLabel.setVisible(showActions);
-		actionsValue.setVisible(showActions);
-		actionsRateLabel.setVisible(showActions);
-		actionsRateValue.setVisible(showActions);
-		if (showActions)
-		{
-			actionsLabel.setText("Actions");
-			actionsValue.setText(String.format("%,d", actions));
-			actionsRateLabel.setText("Actions/hr");
-			actionsRateValue.setText(String.format("%,d", liveRates.getActionsPerHour()));
-		}
-
-		double retention = session.getRetentionRate();
-		boolean showRetention = retention >= 0;
-		retentionLabel.setVisible(showRetention);
-		retentionValue.setVisible(showRetention);
-		if (showRetention)
-		{
-			retentionLabel.setText("Retention");
-			retentionValue.setText(String.format("%.1f%%", retention * 100));
-		}
-	}
-
-	/**
-	 * SPEC.md §11's FUTURE XP section - per-skill totals for what the
-	 * session's retained/banked resources would eventually yield, each
-	 * labelled with its confidence tier (§33) so a projection can never
-	 * be mistaken for earned XP. Renders nothing at all when no item
-	 * resolves, which is the common and correct case (§35).
-	 */
-	private void refreshFutureXp(ActivitySession session)
-	{
-		futureXpPanel.removeAll();
+		projectionPanel.removeAll();
 
 		List<FutureXpSummary.Row> rows = FutureXpSummary.build(session, itemUseStore);
+		projectionPanel.setVisible(!rows.isEmpty());
+
 		if (!rows.isEmpty())
 		{
-			JLabel header = new JLabel("Future XP");
-			header.setFont(FontManager.getRunescapeSmallFont());
-			header.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-			futureXpPanel.add(header);
+			JPanel header = new JPanel(new BorderLayout());
+			header.setBackground(Palette.PANEL);
+			header.setBorder(BorderFactory.createCompoundBorder(
+				BorderFactory.createMatteBorder(1, 0, 0, 0, Palette.BORDER),
+				BorderFactory.createEmptyBorder(5, 0, 0, 0)));
+			header.add(Ui.label("PROJECTED — NOT EARNED",
+				FontManager.getRunescapeSmallFont(), Palette.DIMMEST), BorderLayout.WEST);
+			projectionPanel.add(Ui.fixHeight(header));
 
 			for (FutureXpSummary.Row row : rows)
 			{
-				JLabel line = new JLabel(row.format());
-				line.setFont(FontManager.getRunescapeSmallFont());
-				futureXpPanel.add(line);
+				JPanel line = new JPanel(new BorderLayout());
+				line.setBackground(Palette.PANEL);
+				line.setBorder(BorderFactory.createEmptyBorder(4, 2, 0, 2));
+				line.add(Ui.label(row.skill.getName(),
+					FontManager.getRunescapeSmallFont(), Palette.DIM), BorderLayout.WEST);
+				line.add(alignRight(Ui.label("~ +" + formatAbbreviated(row.xp),
+					FontManager.getRunescapeSmallFont(), Palette.DIM)), BorderLayout.EAST);
+				projectionPanel.add(Ui.fixHeight(line));
+
+				JLabel note = Ui.label(row.confidence.label,
+					FontManager.getRunescapeSmallFont(), Palette.DIMMEST);
+				note.setBorder(BorderFactory.createEmptyBorder(2, 2, 0, 2));
+				projectionPanel.add(Ui.fixHeight(note));
 			}
 		}
 
-		futureXpPanel.revalidate();
-		futureXpPanel.repaint();
+		projectionPanel.revalidate();
+		projectionPanel.repaint();
 	}
+
+	// ------------------------------------------------------------------
+	// Formatting - see the design's overflow rules
+	// ------------------------------------------------------------------
 
 	private static String formatDuration(long totalSeconds)
 	{
-		long hours = totalSeconds / 3600;
-		long minutes = (totalSeconds % 3600) / 60;
-		long seconds = totalSeconds % 60;
-		return String.format("%02d:%02d:%02d", hours, minutes, seconds);
+		return String.format("%02d:%02d:%02d", totalSeconds / 3600, (totalSeconds % 3600) / 60, totalSeconds % 60);
 	}
 
-	private static String formatRate(int xp, long seconds)
+	private static String formatShort(long totalSeconds)
 	{
-		if (seconds <= 0)
+		return String.format("%02d:%02d", totalSeconds / 60, totalSeconds % 60);
+	}
+
+	/**
+	 * Rates and projections abbreviate over 9,999; item quantities, retention
+	 * and timers never do (the design's overflow rules).
+	 */
+	static String formatAbbreviated(double value)
+	{
+		if (value >= 1_000_000)
 		{
-			return "0";
+			return String.format("%.2fm", value / 1_000_000);
 		}
-		long perHour = Math.round(xp / (double) seconds * 3600);
-		return String.format("%,d", perHour);
+		if (value >= 10_000)
+		{
+			return String.format("%.1fk", value / 1_000);
+		}
+		return String.format("%,d", Math.round(value));
 	}
 }
