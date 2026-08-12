@@ -102,6 +102,22 @@ public class SlayerSessionTest
 	}
 
 	@Test
+	public void combatRecordsNoActions()
+	{
+		// One combat tick delivers Attack, Strength, Hitpoints and Slayer XP,
+		// all collapsing to the same tracking group (§7a) - so counting an
+		// action per drop made a single hit register as three or four. Hits
+		// aren't a unit anyone counts anyway; kills are (§37).
+		ActivitySession s = combatSession();
+		s.setActiveSeconds(60);
+		s.recordKills(4);
+
+		assertEquals("combat measures kills, not hits", 0, s.getActions());
+		assertEquals(0.0, s.getActionsPerHour(), 0.001);
+		assertEquals(4, s.getKills());
+	}
+
+	@Test
 	public void combatSessionsAreCategorisedSeparately()
 	{
 		assertEquals("COMBAT", combatSession().getCategory());

@@ -592,6 +592,30 @@ public class SessionManager
 		}
 	}
 
+	/**
+	 * One action per qualifying XP drop - but only where that means
+	 * something.
+	 * <p>
+	 * For gathering, one drop is one log, ore or fish. For combat it is one
+	 * <em>hit</em>, which is not a unit anyone counts, and worse: Attack,
+	 * Strength, Hitpoints and Slayer XP all arrive in the same tick and all
+	 * collapse to the same tracking group (§7a), so a single hit was
+	 * recording three or four actions. Kills are the combat unit (§37), so
+	 * combat sessions record no actions at all rather than a number that is
+	 * both meaningless and inflated.
+	 * <p>
+	 * Byproducts (infernal tools, bonecrusher) route through
+	 * {@link #creditActiveSessionOnly} instead, so one chop can't register
+	 * as two actions either.
+	 */
+	private void recordActionIfMeaningful()
+	{
+		if (!TrackingGroups.isCombatGroup(currentSession.getSkill()))
+		{
+			currentSession.recordAction();
+		}
+	}
+
 	private void processQualifyingEvent(Skill skill, int delta)
 	{
 		Skill groupKey = TrackingGroups.groupKey(skill);
@@ -599,10 +623,7 @@ public class SessionManager
 		if (state == SessionState.ACTIVE && currentSession != null && currentSession.getSkill() == groupKey)
 		{
 			currentSession.addXp(skill, delta);
-			// one action per qualifying drop. Byproducts (infernal tools,
-			// bonecrusher) route through creditActiveSessionOnly instead, so
-			// a single chop can't register as two actions.
-			currentSession.recordAction();
+			recordActionIfMeaningful();
 			lastQualifyingTick = currentTick;
 			lastXpCreditTick = currentTick;
 			return;
@@ -611,7 +632,7 @@ public class SessionManager
 		if (state == SessionState.PAUSED && currentSession != null && currentSession.getSkill() == groupKey)
 		{
 			currentSession.addXp(skill, delta);
-			currentSession.recordAction();
+			recordActionIfMeaningful();
 			lastQualifyingTick = currentTick;
 			lastXpCreditTick = currentTick;
 			state = SessionState.ACTIVE; // [v2] resume threshold = 1 event, distinct from start threshold
@@ -756,10 +777,14 @@ public class SessionManager
 			int firstTick = buffer.events().get(0).getTick();
 			long elapsedMs = Math.max(0, (currentTick - firstTick)) * 600L;
 			session.setStartedAt(Instant.now().minusMillis(elapsedMs));
+			boolean countsActions = !TrackingGroups.isCombatGroup(candidateGroupKey);
 			for (QualifyingXpEvent event : buffer.events())
 			{
 				session.addXp(event.getSkill(), event.getXpDelta());
-				session.recordAction();
+				if (countsActions)
+				{
+					session.recordAction();
+				}
 			}
 		}
 		else

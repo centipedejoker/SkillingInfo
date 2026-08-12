@@ -534,8 +534,9 @@ class CurrentView extends JPanel
 
 		// §40's actions pair. The design drops the duplicate "Logs / Logs per
 		// hour" pair entirely, since it repeats this in almost every session.
+		// combat measures kills, not hits (§37) - see recordActionIfMeaningful
 		int actions = session.getActions();
-		actionsRow.setVisible(actions > 0);
+		actionsRow.setVisible(!combat && actions > 0);
 		if (actions > 0)
 		{
 			actionsValue.setText(String.format("%,d", actions));
