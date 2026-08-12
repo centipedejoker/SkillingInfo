@@ -503,7 +503,13 @@ class CurrentView extends JPanel
 		pausedBand.setVisible(paused);
 		if (paused)
 		{
-			pausedDetail.setText(formatShort(idle) + " · not counted");
+			// §13a: the two pauses look identical but end differently, and
+			// which one you're in is the only thing the player needs to know -
+			// an auto-pause lifts itself the moment they do anything, a
+			// manual one waits for Resume however long that takes.
+			pausedDetail.setText(sessionManager.isManuallyPaused()
+				? formatShort(idle) + " · until you resume"
+				: formatShort(idle) + " · not counted");
 		}
 
 		boolean combat = TrackingGroups.isCombatGroup(session.getSkill());

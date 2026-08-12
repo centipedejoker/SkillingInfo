@@ -217,8 +217,12 @@ ACTIVE
   ├── manual pause → PAUSED
   └── STOP SESSION → COMPLETE
 
-PAUSED
+PAUSED (auto)
   ├── single qualifying event → ACTIVE   [v2: resume threshold = 1 event, distinct from start threshold]
+  ├── manual resume → ACTIVE
+  └── STOP SESSION → COMPLETE
+
+PAUSED (manual)                          [v8: see §13a]
   ├── manual resume → ACTIVE
   └── STOP SESSION → COMPLETE
 
@@ -381,6 +385,21 @@ Do not equate idle time with certainty that the user is physically AFK. It means
 `[v3]` Auto-pause, not auto-end. Bossing Info (§5) times out straight to a completed session on inactivity, with no equivalent of PAUSED. Skilling Info deliberately pauses instead: the product's central question is "what did the account gain," and a player who steps away for six minutes mid-session hasn't gained less account value than one who didn't — ending the session there would undercount active time and force a fresh detection prompt on return for no reason. This is a considered choice, not a gap relative to the reference plugin.
 
 `[v4]` Idle-reset is not XP-only. Once item-flow tracking exists (Phase 2+), a bank-open, pickup, or drop event also counts as qualifying activity for the idle clock, not just XP gain — otherwise a long loot-banking trip with no XP in the idle window would incorrectly auto-pause a session that's still actively in progress (a real scenario for Slayer, where banking between trips can easily exceed the default 5-minute threshold). `SessionManager.recordNonXpActivity()` is already wired for this in Phase 1, ready for the Phase 2+ correlators to call — it resets the idle clock exactly like an XP event would, including resuming a PAUSED session.
+
+## 13a. MANUAL PAUSE `[v8]`
+
+Auto-pause and manual pause were one state with one exit, so a manual pause lasted until the next thing the player did — which for a combat session could be seconds. §13 `[v4]` had broadened the idle signal until loot, pickups, drops and banking all resumed a paused session, and none of that reasoning applies to a pause someone asked for.
+
+**The distinction is inference versus instruction.** An auto-pause is the plugin's guess that the player has stopped; anything they do afterwards is evidence the guess was wrong, so it rightly lifts. A manual pause is a statement about intent, and nothing observable is evidence against it. Only Resume (or Stop) ends one.
+
+**A manual pause records nothing** — not XP, not items, not kills. This follows from the clock rather than being a separate choice: pausing already stops active time, so crediting XP through a manual pause makes every rate in §14 climb for as long as it lasts, and freezes that inflated figure into the finalised record. Declining to record real events sits awkwardly against §34's "raw counts are authoritative", and is the right call anyway — §34 governs what the plugin infers, not what the player instructs. The cost, that a player who pauses and forgets loses that work, is real but visible: the panel carries a full-width PAUSED band throughout, reading `until you resume` rather than the auto-pause's `not counted`.
+
+Two implementation consequences worth keeping:
+
+- **It is a flag on how PAUSED was entered, not a state of its own.** The two pauses are identical in every respect the rest of the system cares about — clock idle, panel dimmed, session preserved — and differ only in what ends them. A `MANUALLY_PAUSED` enum constant would have put that one distinction in front of every `state == PAUSED` check in the manager and the UI, for no gain.
+- **Freezing must not mean skipping the drains.** The delta pools still empty every tick while paused, and pending bank increases are discarded rather than carried (`BankCorrelator.discardPending`). Otherwise a deposit made during the pause lands on the first tick that counts again — §18 `[v8]` in a new costume.
+
+Slayer is the one place where the baseline is deliberately advanced past events that aren't being recorded, which §37 `[v8]` otherwise calls a trap. It is correct here for the same instruction-versus-inference reason: the player asked for that stretch not to count, so those kills must not arrive in a lump on resume.
 
 ## 14. RATE DEFINITIONS `[v7]`
 

@@ -129,6 +129,18 @@ public class BankCorrelator
 	}
 
 	/**
+	 * Drops pending bank increases without attributing them, for ticks where
+	 * {@link #resolve} won't run - no session, or one that isn't recording.
+	 * Same reasoning as step 5 inside {@code resolve}: an unattributable
+	 * deposit is dropped on the floor rather than carried, because carrying
+	 * it only gives a later tick the chance to misattribute it.
+	 */
+	public void discardPending()
+	{
+		increased.clear();
+	}
+
+	/**
 	 * Clears pending un-consumed deltas only. Deliberately does NOT clear
 	 * {@code lastSnapshot} or {@code baselineEstablished} - that's the
 	 * diffing baseline, not per-session state (same reasoning as

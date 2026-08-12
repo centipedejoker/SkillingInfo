@@ -63,6 +63,26 @@ public class SessionManager
 	@Getter
 	private PromptSummary pendingPrompt;
 
+	/**
+	 * `[v8]` Whether PAUSED was entered by the player rather than by the idle
+	 * threshold (§13a). Deliberately a property of how the state was entered
+	 * rather than a state of its own: a manual pause looks and behaves exactly
+	 * like an auto-pause - clock idle, panel dimmed - and differs only in what
+	 * is allowed to end it. Splitting the enum would have forced every
+	 * {@code state == PAUSED} check in the manager and the UI to be revisited
+	 * for the sake of one branch.
+	 * <p>
+	 * While it is set the session records nothing at all - not XP, items or
+	 * kills. That follows from the clock stopping: crediting XP against a
+	 * frozen active time makes every rate in §14 climb for as long as the
+	 * pause lasts, which is precisely the silently-wrong headline figure the
+	 * plugin exists to avoid. A player who pauses and forgets loses the
+	 * record of that work, but loses it visibly - the panel carries a
+	 * full-width PAUSED band the whole time.
+	 */
+	@Getter
+	private boolean manuallyPaused;
+
 	/** Group key (SPEC.md §7a) of whatever candidate/prompt is in flight. */
 	private Skill candidateGroupKey;
 	private Skill suppressedGroupKey;
@@ -178,7 +198,7 @@ public class SessionManager
 		// §39: a bank visit is the natural trip boundary. Recorded from
 		// Phase 1 onwards as a plain timestamp list; aggregating trips out
 		// of it is still deferred, but the data is no longer lost.
-		if ((state == SessionState.ACTIVE || state == SessionState.PAUSED) && currentSession != null)
+		if (isRecording() && currentSession != null)
 		{
 			currentSession.recordBankVisit(Instant.now());
 		}
@@ -207,8 +227,13 @@ public class SessionManager
 		slayerTaskVisible = task != null && !task.isEmpty();
 
 		if ((state != SessionState.ACTIVE && state != SessionState.PAUSED) || currentSession == null
-			|| !TrackingGroups.isCombatGroup(currentSession.getSkill()))
+			|| !TrackingGroups.isCombatGroup(currentSession.getSkill()) || manuallyPaused)
 		{
+			// Advancing the baseline past kills we're declining to record is
+			// exactly what `[v8]` above calls out as a trap - but here it is
+			// the point, not an accident: the player asked for this stretch
+			// not to count, so those kills must not arrive in a lump on
+			// resume. The distinction is instruction versus inference.
 			lastRemainingAmount = remainingAmount;
 			return;
 		}
@@ -241,7 +266,8 @@ public class SessionManager
 	 */
 	public void onNpcLootReceived(Map<Integer, Integer> items)
 	{
-		if ((state != SessionState.ACTIVE && state != SessionState.PAUSED) || currentSession == null)
+		if ((state != SessionState.ACTIVE && state != SessionState.PAUSED)
+			|| currentSession == null || manuallyPaused)
 		{
 			return;
 		}
@@ -265,7 +291,7 @@ public class SessionManager
 	 */
 	public void onDropClicked(int itemId)
 	{
-		if (state == SessionState.ACTIVE || state == SessionState.PAUSED)
+		if (isRecording())
 		{
 			dropCorrelator.onDropClicked(itemId, currentTick);
 		}
@@ -277,11 +303,22 @@ public class SessionManager
 	 */
 	public void onTakeClicked(int itemId)
 	{
-		if (state == SessionState.ACTIVE || state == SessionState.PAUSED)
+		if (isRecording())
 		{
 			log.debug("Take clicked: itemId={} tick={}", itemId, currentTick);
 			pickupCorrelator.onTakeClicked(itemId, currentTick);
 		}
+	}
+
+	/**
+	 * Whether a session exists and is currently taking evidence: ACTIVE, or
+	 * auto-paused and therefore still able to resume on the next thing that
+	 * happens. False for a manual pause (§13a `[v8]`), which records nothing
+	 * until the player resumes.
+	 */
+	private boolean isRecording()
+	{
+		return (state == SessionState.ACTIVE || state == SessionState.PAUSED) && !manuallyPaused;
 	}
 
 	/** SPEC.md §48: feeds live ground-item state into {@link GroundItemTracker}. */
@@ -309,6 +346,14 @@ public class SessionManager
 	 */
 	public void recordNonXpActivity()
 	{
+		// `[v8]` The guard lives here, at the single choke point every
+		// auto-resume passes through, as well as at each caller - so a future
+		// caller can't reintroduce the resume by forgetting about it.
+		if (manuallyPaused)
+		{
+			return;
+		}
+
 		if (state == SessionState.ACTIVE)
 		{
 			lastQualifyingTick = currentTick;
@@ -404,6 +449,7 @@ public class SessionManager
 		pendingTickDeltas.clear();
 		candidateGroupKey = null;
 		candidateGeneratedBuffer.clear();
+		manuallyPaused = false;
 		state = SessionState.IDLE;
 	}
 
@@ -413,7 +459,7 @@ public class SessionManager
 
 	private void creditActiveSessionOnly(Skill skill, int delta)
 	{
-		if ((state == SessionState.ACTIVE || state == SessionState.PAUSED)
+		if ((state == SessionState.ACTIVE || (state == SessionState.PAUSED && !manuallyPaused))
 			&& currentSession != null && currentSession.getSkill() == TrackingGroups.groupKey(skill))
 		{
 			currentSession.addXp(skill, delta);
@@ -482,8 +528,16 @@ public class SessionManager
 			}
 		}
 
-		if ((state != SessionState.ACTIVE && state != SessionState.PAUSED) || currentSession == null)
+		if ((state != SessionState.ACTIVE && state != SessionState.PAUSED)
+			|| currentSession == null || manuallyPaused)
 		{
+			// Every pool feeding the catch-alls has already been drained
+			// above; the bank's is the one exception, because resolve() owns
+			// it. Discard it here rather than let it carry - a deposit made
+			// while nothing was being recorded must not be credited to the
+			// next tick that is (§25a step 5, and §18 `[v8]`'s rule that a
+			// pool emptied on only one path later cancels a real movement).
+			bankCorrelator.discardPending();
 			return;
 		}
 
@@ -689,13 +743,17 @@ public class SessionManager
 			return;
 		}
 
-		if (state == SessionState.PAUSED && currentSession != null && currentSession.getSkill() == groupKey)
+		// [v2] resume threshold = 1 event, distinct from start threshold.
+		// `[v8]` Auto-pause only: a manually paused session neither resumes
+		// nor records, and falls through to the return below.
+		if (state == SessionState.PAUSED && !manuallyPaused
+			&& currentSession != null && currentSession.getSkill() == groupKey)
 		{
 			currentSession.addXp(skill, delta);
 			recordActionIfMeaningful();
 			lastQualifyingTick = currentTick;
 			lastXpCreditTick = currentTick;
-			state = SessionState.ACTIVE; // [v2] resume threshold = 1 event, distinct from start threshold
+			state = SessionState.ACTIVE;
 			return;
 		}
 
@@ -872,6 +930,7 @@ public class SessionManager
 		lastQualifyingTick = currentTick;
 		lastXpCreditTick = currentTick;
 		lastRemainingAmount = -1;
+		manuallyPaused = false;
 
 		buffers.remove(candidateGroupKey);
 		candidateGroupKey = null;
@@ -896,11 +955,18 @@ public class SessionManager
 		state = SessionState.SUPPRESSED;
 	}
 
+	/**
+	 * `[v8]` A manual pause is sticky: only {@link #resume} (or {@link #stop})
+	 * ends it. Auto-pause is a guess about absence, so any evidence of
+	 * activity rightly overrides it; a manual pause is an instruction, and
+	 * nothing the player does afterwards is evidence against it.
+	 */
 	public void pause()
 	{
 		if (state == SessionState.ACTIVE)
 		{
 			state = SessionState.PAUSED;
+			manuallyPaused = true;
 		}
 	}
 
@@ -909,6 +975,7 @@ public class SessionManager
 		if (state == SessionState.PAUSED)
 		{
 			state = SessionState.ACTIVE;
+			manuallyPaused = false;
 			lastQualifyingTick = currentTick;
 		}
 	}
@@ -940,6 +1007,7 @@ public class SessionManager
 		dropCorrelator.reset();
 		pickupCorrelator.reset();
 		bankCorrelator.reset();
+		manuallyPaused = false;
 		state = SessionState.IDLE;
 	}
 }

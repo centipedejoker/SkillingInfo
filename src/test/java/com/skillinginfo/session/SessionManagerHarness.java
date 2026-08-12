@@ -97,6 +97,22 @@ final class SessionManagerHarness
 		return startedSession(skill, items(), items(), items());
 	}
 
+	/**
+	 * Idles the session past the default five-minute threshold so it
+	 * auto-pauses (§13) - as distinct from {@link SessionManager#pause()},
+	 * which is the player's instruction and behaves differently (§13a).
+	 *
+	 * @return the tick it left the session on, for the caller to carry on from
+	 */
+	static int autoPause(SessionManager m)
+	{
+		int tick = STARTED_TICK + 600; // threshold is 300s ≈ 500 ticks
+		m.onGameTick(tick);
+		assertEquals("no qualifying activity for five minutes should auto-pause",
+			SessionState.PAUSED, m.getState());
+		return tick;
+	}
+
 	static ItemFlowEntry entry(SessionManager m, int itemId)
 	{
 		for (ItemFlowEntry candidate : m.getCurrentSession().getItemFlow())

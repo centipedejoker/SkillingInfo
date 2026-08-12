@@ -2,6 +2,7 @@ package com.skillinginfo.session;
 
 import net.runelite.api.Skill;
 import org.junit.Test;
+import static com.skillinginfo.session.SessionManagerHarness.autoPause;
 import static com.skillinginfo.session.SessionManagerHarness.startedSession;
 import static org.junit.Assert.assertEquals;
 
@@ -42,7 +43,7 @@ public class SessionManagerSlayerTest
 	}
 
 	@Test
-	public void killsDuringAPauseAreCountedAndResumeTheSession()
+	public void killsDuringAnAutoPauseAreCountedAndResumeTheSession()
 	{
 		// `[v8]` This was the one signal that both discarded its evidence and
 		// advanced the baseline past it, so the kill was lost rather than
@@ -50,26 +51,24 @@ public class SessionManagerSlayerTest
 		// resume the session.
 		SessionManager m = combatSession();
 		m.onSlayerTaskUpdate(TASK, LOCATION, 40);
-
-		m.pause();
-		assertEquals(SessionState.PAUSED, m.getState());
+		autoPause(m);
 
 		m.onSlayerTaskUpdate(TASK, LOCATION, 39);
 
-		assertEquals("a kill is a kill whatever the session state", 1, m.getCurrentSession().getKills());
-		assertEquals("and it proves the session is still in progress",
-			SessionState.ACTIVE, m.getState());
+		assertEquals("an auto-pause is a guess about absence, and this refutes it",
+			1, m.getCurrentSession().getKills());
+		assertEquals(SessionState.ACTIVE, m.getState());
 	}
 
 	@Test
-	public void killsAfterAPauseAreNotLostToAnAdvancedBaseline()
+	public void killsAfterAnAutoPauseAreNotLostToAnAdvancedBaseline()
 	{
 		// the failure was silent and cumulative: every kill that landed in a
 		// pause moved the baseline on, so nothing was ever caught up
 		SessionManager m = combatSession();
 		m.onSlayerTaskUpdate(TASK, LOCATION, 40);
+		autoPause(m);
 
-		m.pause();
 		m.onSlayerTaskUpdate(TASK, LOCATION, 39);
 		m.onSlayerTaskUpdate(TASK, LOCATION, 38);
 
