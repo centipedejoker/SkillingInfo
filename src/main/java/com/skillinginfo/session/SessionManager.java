@@ -93,6 +93,16 @@ public class SessionManager
 	// the same trap that made XP Tracker's rates unusable (§14).
 	private int lastRemainingAmount = -1;
 
+	/**
+	 * Whether RuneLite's Slayer plugin is actually reporting a task. It is a
+	 * declared dependency, but that only guarantees it is loaded and
+	 * injectable - not that the user has it switched on. With it off, its
+	 * getters simply return null and 0, so kills silently sit at zero with
+	 * nothing to explain why. The panel uses this to say so.
+	 */
+	@Getter
+	private boolean slayerTaskVisible;
+
 	public SessionManager(SkillingInfoConfig config, SessionRepository repository, ItemUseStore itemUseStore)
 	{
 		this.config = config;
@@ -185,6 +195,8 @@ public class SessionManager
 	 */
 	public void onSlayerTaskUpdate(String task, String location, int remainingAmount)
 	{
+		slayerTaskVisible = task != null && !task.isEmpty();
+
 		if (state != SessionState.ACTIVE || currentSession == null
 			|| !TrackingGroups.isCombatGroup(currentSession.getSkill()))
 		{

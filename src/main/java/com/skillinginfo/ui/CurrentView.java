@@ -104,6 +104,7 @@ class CurrentView extends JPanel
 	private final JLabel killsValue = Ui.bold("", Palette.TEXT);
 	private final JLabel kphValue = Ui.bold("", Palette.TEXT);
 	private final JPanel killsRow;
+	private final JLabel slayerHintLabel = Ui.label("", FontManager.getRunescapeSmallFont(), Palette.DIMMEST);
 	private final JLabel overflowLine = Ui.label("", FontManager.getRunescapeSmallFont(), Palette.DIMMEST);
 
 	private final JPanel projectionPanel = new JPanel();
@@ -376,6 +377,8 @@ class CurrentView extends JPanel
 		p.add(actionsRow);
 		p.add(Ui.gap(3));
 		p.add(killsRow);
+		slayerHintLabel.setBorder(BorderFactory.createEmptyBorder(5, 2, 0, 2));
+		p.add(Ui.fixHeight(slayerHintLabel));
 
 		overflowLine.setBorder(BorderFactory.createEmptyBorder(5, 2, 0, 2));
 		p.add(Ui.fixHeight(overflowLine));
@@ -539,6 +542,18 @@ class CurrentView extends JPanel
 			actionsValue.setForeground(primary);
 			actionsHrValue.setText(String.format("%,d", Math.round(session.getActionsPerHour())));
 			actionsHrValue.setForeground(primary);
+		}
+
+		// A combat session with no task in sight means RuneLite's own Slayer
+		// plugin is switched off - it's a declared dependency, but that only
+		// makes it injectable, not enabled. Say so, rather than leaving kills
+		// sitting at zero with no explanation.
+		boolean slayerBlind = combat && !sessionManager.isSlayerTaskVisible();
+		slayerHintLabel.setVisible(slayerBlind);
+		if (slayerBlind)
+		{
+			slayerHintLabel.setText("<html><body style='width:195px'>Enable RuneLite's Slayer "
+				+ "plugin to count kills. Everything else is still tracked.</body></html>");
 		}
 
 		int kills = session.getKills();
