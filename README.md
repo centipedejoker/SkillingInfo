@@ -180,7 +180,9 @@ comes from the Slayer plugin, and monster drops from the Loot Tracker.
 
 ## Documentation
 
-`SPEC.md` is the full product specification and design record — including
-why particular decisions were made, and where implementation forced a
-rethink. `DESIGN_BRIEF.md` is the brief the sidebar layout was designed
-against.
+- `SPEC.md` — the full product specification and design record, including
+  why particular decisions were made and where implementation forced a
+  rethink.
+- `HANDOVER.md` — project state, how to work on it, and the traps that
+  already cost time once. Read this first if you're picking the code up.
+- `DESIGN_BRIEF.md` — the brief the sidebar layout was designed against.
