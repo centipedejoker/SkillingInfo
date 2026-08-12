@@ -451,6 +451,12 @@ OTHER_INVENTORY_GAIN
 OTHER_INVENTORY_LOSS
 ```
 
+**`[v7]` `ITEM_CONSUMED` is now implemented**, detected as the exact mirror of generation (§16): an inventory *decrease* inside the XP-credit window that no more specific signal explains. Drops (click-gated), bank deposits (bank-backed) and wields (matched against an equipment-container increase) each claim their share of the decrease pool first, so what remains is genuinely unexplained loss during productive activity — the raw fish behind the cooked one, the ore behind the bar, the runes behind the cast.
+
+This makes the recipe table described below **unnecessary for correct accounting**: cooking 100 raw sharks records 100 consumed and 100 generated independently, which nets out correctly without needing to know that one specifically became the other. A recipe table would only add the ability to *say* A became B, which nothing currently displays. `ITEM_TRANSFORMED` therefore remains unimplemented by choice, not by omission.
+
+Known limitation, accepted: moving items into a container that isn't the bank — a looting bag, POH storage — reads as consumption. That undercounts retention rather than inventing gain, which is the side §27 says to err on.
+
 **`[v2]` `ITEM_TRANSFORMED` was missing** despite §54 requiring that item transformation (e.g. raw fish → cooked fish, logs → planks) not be misclassified as a drop-and-acquire pair. Populate it only from a static known-recipe table (cooking, fletching, smithing, herblore, etc., sourced from existing RuneLite plugin data where available): if itemId A decreases and itemId B increases in the same tick and (A→B) is a known recipe pair, emit `ITEM_TRANSFORMED` and exclude both sides from drop/acquire counting. Unmapped pairs are left as `OTHER_INVENTORY_LOSS` / `OTHER_INVENTORY_GAIN` rather than guessed.
 
 Each event contains, where available: `timestamp`, `itemId`, `quantity`, `source`, `confidence`, `activitySessionId`.
@@ -1120,7 +1126,9 @@ Recommended: "Tracks personal skilling sessions, XP rates, idle time, activity o
 
 **Phase 5** 🔨 — activity modules. Woodcutting and Fishing ✅ **live-validated**; Mining, Hunter and Farming added (same mechanism, pending live validation); other skills fall back to §15's generic tracking.
 
-`[v7]` **Production skills are deliberately excluded for now.** Cooking, Smithing, Fletching, Herblore, Crafting and Runecraft all consume an ingredient to make their output. Classification itself would work fine (cooked shark → "Cooking sharks"), but §18's `ITEM_CONSUMED` isn't implemented, so their item flow would show the product gained without the ingredient spent — a one-sided ledger that misrepresents account gain, which is the one thing §2/§34 say not to do. `ITEM_CONSUMED` is the prerequisite, not more table entries. Gathering skills have no such problem: nothing is consumed, so the ledger is complete as-is. (Farming is a partial exception that happens to work — seeds are consumed at planting, typically in a different session entirely from the harvest.)
+`[v7]` **Production skills were blocked on `ITEM_CONSUMED`, which now exists (§18).** Cooking, Smithing and Runecraft are added. Their ledgers are two-sided: cooking 100 raw sharks records the raw fish consumed *and* the cooked fish gained, so net retention is honest rather than counting the product as pure gain. Fletching, Herblore and Crafting are the same shape and need only table entries, left until there's a reason to add them.
+
+Farming remains a partial exception that happens to work either way — seeds are consumed at planting, typically in a different session entirely from the harvest.
 
 `[v7]` Implementation notes:
 - **Classification is derived from what the session produced**, not from animation/object/region ids. That's the most conservative deterministic signal available (§16), it's already tracked reliably from Phase 2, and it can't break when Jagex renumbers content. Reclassified every tick, so the name sharpens as evidence accumulates rather than being locked in by the first item seen.
