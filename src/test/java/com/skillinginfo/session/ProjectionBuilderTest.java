@@ -157,6 +157,33 @@ public class ProjectionBuilderTest
 	}
 
 	@Test
+	public void ratesAreScopedToThisSessionOnly()
+	{
+		// §14 [v7]: computed from the session's own active time. Reading
+		// them from XP Tracker gave 15 xp/hr for a session actually running
+		// at 20,348 - its snapshot is scoped to its own much longer session.
+		ActivitySession s = new ActivitySession();
+		s.setSkill(Skill.MINING);
+		s.addXp(Skill.MINING, 130);
+		s.recordAction();
+		s.recordAction();
+		s.setActiveSeconds(23);
+
+		assertEquals(20_348, Math.round(s.getXpPerHour()));
+		assertEquals(313, Math.round(s.getActionsPerHour()));
+	}
+
+	@Test
+	public void ratesAreZeroRatherThanInfiniteBeforeAnyTimeHasPassed()
+	{
+		ActivitySession s = new ActivitySession();
+		s.setSkill(Skill.MINING);
+		s.addXp(Skill.MINING, 130);
+		assertEquals(0, Math.round(s.getXpPerHour()));
+		assertEquals(0, Math.round(s.getActionsPerHour()));
+	}
+
+	@Test
 	public void aSessionWithNoProjectionReadsAsEmptyNotNull()
 	{
 		// pre-v2 records have no projection recorded at all

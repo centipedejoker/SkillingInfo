@@ -65,6 +65,15 @@ public class ActivitySession
 
 	private final Map<Skill, Integer> xpGained = new EnumMap<>(Skill.class);
 
+	/**
+	 * Qualifying XP drops credited to this session - one per action.
+	 * Counted here rather than read from XP Tracker because that plugin's
+	 * figures are scoped to *its* session, not ours (§14 [v7]). Works for
+	 * skills that produce no items at all, which is what made an external
+	 * action count attractive in the first place.
+	 */
+	private int actions;
+
 	private final Map<Integer, ItemFlowEntry> itemFlow = new LinkedHashMap<>();
 
 	/**
@@ -204,6 +213,28 @@ public class ActivitySession
 	public int getXpGained(Skill skill)
 	{
 		return xpGained.getOrDefault(skill, 0);
+	}
+
+	public void recordAction()
+	{
+		actions++;
+	}
+
+	/** §14: XP per hour of *active* time. */
+	public double getXpPerHour()
+	{
+		return activeSeconds > 0 ? getXpGained(skill) / (double) activeSeconds * 3600 : 0;
+	}
+
+	public double getActionsPerHour()
+	{
+		return activeSeconds > 0 ? actions / (double) activeSeconds * 3600 : 0;
+	}
+
+	/** Total projected XP recorded for this session (§33), across all skills. */
+	public double getProjectedXpTotal()
+	{
+		return getProjection().stream().mapToDouble(ProjectedXp::getXp).sum();
 	}
 
 	public void addTripBoundary(Instant when)

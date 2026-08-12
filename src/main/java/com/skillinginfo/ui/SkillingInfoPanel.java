@@ -2,7 +2,6 @@ package com.skillinginfo.ui;
 
 import com.skillinginfo.session.ActivitySession;
 import com.skillinginfo.session.ItemUseStore;
-import com.skillinginfo.session.LiveRates;
 import com.skillinginfo.session.SessionManager;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
@@ -50,7 +49,7 @@ public class SkillingInfoPanel extends PluginPanel
 	private Skill selectedSkill;
 	private Set<Skill> renderedSkills = new LinkedHashSet<>();
 
-	public SkillingInfoPanel(SessionManager sessionManager, SkillIconManager skillIconManager, ItemUseStore itemUseStore, Map<Integer, String> itemNames, LiveRates liveRates, ItemManager itemManager, BufferedImage pluginIcon)
+	public SkillingInfoPanel(SessionManager sessionManager, SkillIconManager skillIconManager, ItemUseStore itemUseStore, Map<Integer, String> itemNames, ItemManager itemManager, BufferedImage pluginIcon)
 	{
 		super(false);
 		this.sessionManager = sessionManager;
@@ -60,7 +59,7 @@ public class SkillingInfoPanel extends PluginPanel
 		setLayout(new BorderLayout());
 		setBackground(Palette.PANEL);
 
-		currentView = new CurrentView(sessionManager, itemUseStore, itemNames, liveRates, itemManager, skillIconManager, this::refresh);
+		currentView = new CurrentView(sessionManager, itemUseStore, itemNames, itemManager, skillIconManager, this::refresh);
 		historyView = new HistoryView(itemNames, itemManager);
 
 		cards.add(currentView, CURRENT_CARD);

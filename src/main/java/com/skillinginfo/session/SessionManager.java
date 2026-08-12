@@ -283,6 +283,12 @@ public class SessionManager
 				break;
 			case ACTIVE:
 				clock.tickActive();
+				if (currentSession != null)
+				{
+					// rates derive from activeSeconds, so it has to be live
+					// rather than only written at finalisation
+					currentSession.setActiveSeconds(clock.getActiveSeconds());
+				}
 				tickActive();
 				break;
 			case PAUSED:
@@ -500,6 +506,10 @@ public class SessionManager
 		if (state == SessionState.ACTIVE && currentSession != null && currentSession.getSkill() == groupKey)
 		{
 			currentSession.addXp(skill, delta);
+			// one action per qualifying drop. Byproducts (infernal tools,
+			// bonecrusher) route through creditActiveSessionOnly instead, so
+			// a single chop can't register as two actions.
+			currentSession.recordAction();
 			lastQualifyingTick = currentTick;
 			lastXpCreditTick = currentTick;
 			return;
@@ -508,6 +518,7 @@ public class SessionManager
 		if (state == SessionState.PAUSED && currentSession != null && currentSession.getSkill() == groupKey)
 		{
 			currentSession.addXp(skill, delta);
+			currentSession.recordAction();
 			lastQualifyingTick = currentTick;
 			lastXpCreditTick = currentTick;
 			state = SessionState.ACTIVE; // [v2] resume threshold = 1 event, distinct from start threshold
@@ -655,6 +666,7 @@ public class SessionManager
 			for (QualifyingXpEvent event : buffer.events())
 			{
 				session.addXp(event.getSkill(), event.getXpDelta());
+				session.recordAction();
 			}
 		}
 		else

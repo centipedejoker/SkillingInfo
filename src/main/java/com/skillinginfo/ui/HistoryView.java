@@ -119,6 +119,7 @@ class HistoryView extends JPanel
 		int generated = 0;
 		int kept = 0;
 		int banked = 0;
+		double projectedXp = 0;
 		for (ActivitySession s : sessions)
 		{
 			activeSeconds += s.getActiveSeconds();
@@ -126,6 +127,7 @@ class HistoryView extends JPanel
 			generated += s.getTotalGenerated();
 			kept += s.getTotalNetRetained();
 			banked += s.getTotalBanked();
+			projectedXp += s.getProjectedXpTotal();
 		}
 
 		JPanel block = new JPanel();
@@ -143,14 +145,18 @@ class HistoryView extends JPanel
 		stats.setOpaque(false);
 		stats.add(miniStat("ACTIVE", formatHours(activeSeconds), Palette.TEXT));
 		stats.add(miniStat("XP", CurrentView.formatAbbreviated(totalXp), Palette.TEXT));
-		// banked is the only accent on this block - it is the account gain
-		stats.add(miniStat("BANKED", String.format("%,d", banked), Palette.ACCENT));
+		// the accent carries the account gain, expressed as XP so it's
+		// comparable across skills; the raw banked count is in the footer
+		stats.add(miniStat("BANKED XP",
+			projectedXp > 0 ? "+" + CurrentView.formatAbbreviated(projectedXp) : "-", Palette.ACCENT));
 		block.add(Ui.fixHeight(stats));
 
 		String retention = generated > 0
 			? String.format(" · %.1f%% retained", kept * 100.0 / generated)
 			: "";
-		JLabel footer = Ui.dim(sessions.size() + (sessions.size() == 1 ? " session" : " sessions") + retention);
+		String bankedItems = banked > 0 ? String.format(" · %,d banked", banked) : "";
+		JLabel footer = Ui.dim(sessions.size() + (sessions.size() == 1 ? " session" : " sessions")
+			+ bankedItems + retention);
 		footer.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
 		block.add(Ui.fixHeight(footer));
 
@@ -200,7 +206,17 @@ class HistoryView extends JPanel
 		titleLine.setOpaque(false);
 		JLabel title = isOpen ? Ui.bold(session.getActivity(), Palette.TEXT) : Ui.body(session.getActivity());
 		titleLine.add(title, BorderLayout.CENTER);
-		titleLine.add(Ui.bold(String.format("%,d", session.getTotalNetRetained()), Palette.ACCENT), BorderLayout.EAST);
+
+		// The accent figure is the session's projected XP, not its item
+		// count: XP is the comparable quantity across sessions and skills,
+		// whereas "819" means nothing without knowing it's logs. The item
+		// counts are still the authoritative record (§34) and are shown in
+		// full in the drill-down.
+		double projectedXp = session.getProjectedXpTotal();
+		String headline = projectedXp > 0
+			? "+" + CurrentView.formatAbbreviated(projectedXp) + " xp"
+			: String.format("%,d", session.getTotalNetRetained());
+		titleLine.add(Ui.bold(headline, Palette.ACCENT), BorderLayout.EAST);
 		text.add(titleLine);
 
 		long activeSeconds = session.getActiveSeconds();

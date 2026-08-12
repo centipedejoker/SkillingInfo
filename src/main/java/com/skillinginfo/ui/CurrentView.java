@@ -5,7 +5,6 @@ import com.skillinginfo.session.FutureXpResolver;
 import com.skillinginfo.session.ItemFlowEntry;
 import com.skillinginfo.session.ItemUse;
 import com.skillinginfo.session.ItemUseStore;
-import com.skillinginfo.session.LiveRates;
 import com.skillinginfo.session.ProjectionBuilder;
 import com.skillinginfo.session.PromptSummary;
 import com.skillinginfo.session.SessionManager;
@@ -61,7 +60,6 @@ class CurrentView extends JPanel
 	private final SessionManager sessionManager;
 	private final ItemUseStore itemUseStore;
 	private final Map<Integer, String> itemNames;
-	private final LiveRates liveRates;
 	private final ItemManager itemManager;
 	private final SkillIconManager skillIconManager;
 	private final Runnable onAction;
@@ -126,12 +124,11 @@ class CurrentView extends JPanel
 	}
 
 	CurrentView(SessionManager sessionManager, ItemUseStore itemUseStore, Map<Integer, String> itemNames,
-		LiveRates liveRates, ItemManager itemManager, SkillIconManager skillIconManager, Runnable onAction)
+		ItemManager itemManager, SkillIconManager skillIconManager, Runnable onAction)
 	{
 		this.sessionManager = sessionManager;
 		this.itemUseStore = itemUseStore;
 		this.itemNames = itemNames;
-		this.liveRates = liveRates;
 		this.itemManager = itemManager;
 		this.skillIconManager = skillIconManager;
 		this.onAction = onAction;
@@ -514,18 +511,18 @@ class CurrentView extends JPanel
 		idleValue.setForeground(secondary);
 		xpValue.setText(String.format("+%,d", xp));
 		xpValue.setForeground(primary);
-		xpHrValue.setText(String.format("%,d", liveRates.getXpPerHour()));
+		xpHrValue.setText(String.format("%,d", Math.round(session.getXpPerHour())));
 		xpHrValue.setForeground(primary);
 
 		// §40's actions pair. The design drops the duplicate "Logs / Logs per
 		// hour" pair entirely, since it repeats this in almost every session.
-		int actions = liveRates.getActions();
+		int actions = session.getActions();
 		actionsRow.setVisible(actions > 0);
 		if (actions > 0)
 		{
 			actionsValue.setText(String.format("%,d", actions));
 			actionsValue.setForeground(primary);
-			actionsHrValue.setText(String.format("%,d", liveRates.getActionsPerHour()));
+			actionsHrValue.setText(String.format("%,d", Math.round(session.getActionsPerHour())));
 			actionsHrValue.setForeground(primary);
 		}
 

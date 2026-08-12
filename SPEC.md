@@ -384,22 +384,20 @@ Do not equate idle time with certainty that the user is physically AFK. It means
 
 ## 14. RATE DEFINITIONS `[v7]`
 
-`[v7]` **Live rates are read from RuneLite's `XpTrackerService`, not recomputed here** — §5's "do not unnecessarily recreate proven mechanisms" applied properly. `XpTrackerService` is one of only seven public plugin service APIs in RuneLite, and exposes `getXpHr`, `getActions` and `getActionsHr` per skill. This is declared via `@PluginDependency(XpTrackerPlugin.class)`, which makes XP Tracker a hard requirement, and sampled on the client thread into `LiveRates` so the Swing EDT never reaches into another plugin's state.
-
-Two consequences, accepted deliberately:
-- **Live rate figures follow XP Tracker's session, not ours.** A user resetting XP Tracker mid-session resets the displayed rates. Our own session XP total stays authoritative and unaffected (§34) — only the derived rate display is delegated.
-- **History cannot use it.** `XpTrackerService` only knows about now, so completed sessions still derive their rates from each session's persisted raw XP and active time. That's required for §34's reproducibility anyway: a record from last week has to be recomputable from the record.
-
-Free win from the same change: `getActions` works for skills that produce no items at all (Agility laps, Thieving pickpockets), which our item-derived counts never could.
-
-**Not available for reuse** (checked, not assumed): RuneLite's skilling plugins classify internally but expose nothing — `Rock` is package-private, and `FishingSpot`/`Axe` no longer exist. §16's classification tables are therefore genuinely ours to maintain.
-
-
-
 **Active XP/hour** = XP gained / active seconds × 3600
 **Overall XP/hour** = XP gained / total seconds × 3600
 
 Persist raw values. Calculated values may be regenerated.
+
+`[v7]` **Rates are computed from the session's own clock, and `XpTrackerService` is no longer used.** An earlier revision delegated them to RuneLite's XP Tracker on §5's "don't recreate proven mechanisms" grounds. Live testing showed why that can't work: a session genuinely running at 20,348 XP/hr displayed **15**, and actions/hour displayed **0**.
+
+The cause is a scope mismatch, not a bug in XP Tracker. Its snapshot covers *its* session, which persists across logins and may have been accumulating for days — so our few minutes of XP were being divided by its hours of elapsed time. The same applies to `getActions`, so none of its figures can be borrowed for a session with different boundaries.
+
+Actions are therefore counted here instead, as one per qualifying XP drop credited to the session. That keeps the property that made an external count attractive — it works for skills that produce no items at all, like Agility laps and Thieving pickpockets — while staying scoped to our own start and stop. Byproduct XP (infernal tools, bonecrusher) is excluded, so one chop cannot register as two actions.
+
+Removing the dependency also drops `@PluginDependency(XpTrackerPlugin.class)`, so XP Tracker no longer has to be enabled.
+
+**Still genuinely reused** (checked, not assumed): RuneLite's skilling plugins expose no classification data — `Rock` is package-private and `FishingSpot`/`Axe` no longer exist — so §16's tables are ours by necessity. `SlayerPluginService` *is* public and should be consumed rather than rebuilt when Phase 6 arrives.
 
 ## 15. GENERIC SKILLING FALLBACK
 
