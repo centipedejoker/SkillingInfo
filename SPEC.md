@@ -1155,7 +1155,7 @@ Farming remains a partial exception that happens to work either way — seeds ar
 
 **Phase 6** — Slayer; KPH; task loadouts; loot flow; trip support (activates the `tripBoundaries` field pre-wired in Phase 1).
 
-**Phase 7** 🔨 — **UI design pass** implemented (pending live validation); documentation; screenshots; tests; Plugin Hub release.
+**Phase 7** 🔨 — **UI design pass** ✅ **live-validated** (all six states, item sprites, collapsible history, per-skill aggregate and running collected tally); documentation, screenshots, and Plugin Hub release still to do.
 
 `[v7]` **The UI pass is a first-class Phase 7 deliverable, not polish-if-there's-time.** Up to this point the panel has accreted one section per phase with no design pass, and it shows. Deferring it to pre-release is a deliberate call (build features against a stable data model first, design once against the full picture) — but it is explicitly scheduled, and §59's release screenshots are gated on it. Scope, in priority order:
 
