@@ -895,7 +895,7 @@ Abyssal Demons
 
 `[v7]` **History leads with a running per-skill tally**, not just a list of trips: an all-time aggregate (active time, XP, banked XP) followed by a cumulative per-item count of what the account has actually accumulated across every session for that skill. This is the §62 question "what resources do I actually produce" answered directly, rather than left for the player to sum by eye across rows.
 
-Banked is called out separately from the total only where the two differ — repeating "8,204 · 8,204 banked" on every row is noise, but the gap matters when there is one, since banked is confirmed account gain (§33) and the remainder is still sitting in an inventory somewhere.
+**Banked drives those rows**, not total retained. It is the confirmed account gain (§33) — the strongest claim the plugin can make about an item — so it takes the headline figure and the accent colour, which the palette reserves for exactly that. Anything kept but not yet banked is still listed, but as a dim figure with the reason stated: it is sitting in an inventory and could still be lost, so showing it in accent would claim more certainty than the data supports.
 
 ## 44. STRUCTURED LOCAL OUTPUT `[v2][v3][v4]`
 

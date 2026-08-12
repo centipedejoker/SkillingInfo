@@ -170,12 +170,15 @@ class HistoryView extends JPanel
 	 * the account has actually accumulated, rather than what any one trip
 	 * produced.
 	 * <p>
-	 * Ordered by quantity so the staple output leads and incidental drops
-	 * fall to the bottom. Banked is called out separately from the total
-	 * only when the two differ: saying "8,204 · 8,204 banked" on every row
-	 * is noise, but the gap between them matters when there is one, since
-	 * banked is the confirmed account gain (§33) and the remainder is still
-	 * sitting in an inventory somewhere.
+	 * <b>Banked drives the row.</b> It is the confirmed account gain (§33) -
+	 * the strongest thing the plugin can say about an item - so it takes the
+	 * headline figure and the accent colour, which the palette reserves for
+	 * exactly that. Anything kept but not yet banked is still listed, but as
+	 * a dim figure with the reason stated, because it is a weaker claim: it
+	 * is sitting in an inventory and could still be lost.
+	 * <p>
+	 * Ordered by banked quantity so what the account has actually secured
+	 * leads, and incidental drops fall to the bottom.
 	 */
 	private JPanel buildCollectedSummary(List<ActivitySession> sessions)
 	{
@@ -209,7 +212,13 @@ class HistoryView extends JPanel
 		panel.add(Ui.band("COLLECTED · ALL TIME"));
 
 		totals.entrySet().stream()
-			.sorted((a, b) -> Integer.compare(b.getValue()[0], a.getValue()[0]))
+			.sorted((a, b) -> {
+				// banked first, since that's what the section is about;
+				// merely-held quantity only breaks ties between items with
+				// the same banked total (typically both zero)
+				int byBanked = Integer.compare(b.getValue()[1], a.getValue()[1]);
+				return byBanked != 0 ? byBanked : Integer.compare(b.getValue()[0], a.getValue()[0]);
+			})
 			.forEach(e -> panel.add(collectedRow(e.getKey(), e.getValue()[0], e.getValue()[1])));
 
 		return panel;
@@ -237,20 +246,32 @@ class HistoryView extends JPanel
 		}
 		row.add(icon, BorderLayout.WEST);
 
+		int held = Math.max(0, retained - banked);
+
 		JPanel text = new JPanel();
 		text.setLayout(new BoxLayout(text, BoxLayout.Y_AXIS));
 		text.setOpaque(false);
 		text.add(Ui.body(itemNames.getOrDefault(itemId, "Item #" + itemId)));
-		if (banked != retained)
+		if (held > 0)
 		{
-			text.add(Ui.label(String.format("%,d banked", banked),
+			// naming it as unbanked keeps the headline figure honest - the
+			// row is a banked count, not a total, and the difference is real
+			text.add(Ui.label(banked > 0
+					? String.format("+%,d not banked", held)
+					: String.format("%,d held, not banked", held),
 				FontManager.getRunescapeSmallFont(), Palette.DIMMEST));
 		}
 		row.add(text, BorderLayout.CENTER);
 
 		JPanel value = new JPanel(new BorderLayout());
 		value.setOpaque(false);
-		value.add(Ui.bold(String.format("%,d", retained), Palette.ACCENT), BorderLayout.EAST);
+		// accent is reserved for confirmed account gain, so an item that has
+		// never been banked shows its held count in dim instead - it would
+		// otherwise claim more certainty than the data supports
+		value.add(banked > 0
+				? Ui.bold(String.format("%,d", banked), Palette.ACCENT)
+				: Ui.bold(String.format("%,d", held), Palette.DIM),
+			BorderLayout.EAST);
 		row.add(value, BorderLayout.EAST);
 
 		return Ui.fixHeight(row);
