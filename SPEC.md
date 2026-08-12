@@ -271,7 +271,11 @@ v0.1 should use simple deterministic rules. Initial suggested confidence gate:
 - same skill
 - approximately 3–5 XP drops
 - within approximately 60–90 seconds
-- sufficiently spaced to resemble repeated actions (minimum ~2 seconds between drops, to reject a burst that lands in one or two ticks)
+- sufficiently spaced to resemble repeated actions, checked as the buffer's **total span**, not as a gap between every consecutive pair
+
+`[v7]` **The per-pair reading of that last rule was a real bug.** Requiring a fixed gap between every two drops meant any fast method — power-mining and most fishing produce output every 2-3 ticks — had pairs closer than the threshold, and a single violation discarded the whole buffer. Since fresh fast pairs kept arriving before old ones aged out of the window, such a session could sit in CANDIDATE indefinitely and never prompt, with nothing to show for it but a session that never started.
+
+The rule's stated purpose is only to reject "a burst that lands in one or two ticks" — a reward arriving all at once. Checking that the buffer spans more than that says exactly this, and cannot be poisoned by one quick pair. Covered by `CandidateDetectorTest`, including the fast-cadence cases that previously failed.
 
 Tune through real gameplay. Avoid over-engineered detection.
 

@@ -28,13 +28,13 @@ public interface SkillingInfoConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "minSpacingSeconds",
-		name = "Minimum spacing (seconds)",
-		description = "Minimum seconds between consecutive drops; rejects reward bursts that land in one or two ticks (spec §8, §9)."
+		keyName = "minSpanSeconds",
+		name = "Minimum span (seconds)",
+		description = "The qualifying XP drops must span at least this long in total, which rejects a reward burst arriving all at once (spec §8). Deliberately small: this is an anti-burst guard, not a speed limit - checking the gap between every pair instead made fast methods like power-mining undetectable."
 	)
-	default int minSpacingSeconds()
+	default int minSpanSeconds()
 	{
-		return 2;
+		return 1;
 	}
 
 	@ConfigItem(

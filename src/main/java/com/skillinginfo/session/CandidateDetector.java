@@ -36,17 +36,25 @@ public final class CandidateDetector
 			return Optional.empty();
 		}
 
-		int minSpacingTicks = secondsToTicks(config.minSpacingSeconds());
-		for (int i = 1; i < events.size(); i++)
+		// SPEC.md §8's anti-burst guard, as a check on the buffer's total
+		// span rather than on every consecutive pair.
+		//
+		// The per-pair version required a fixed gap between *every* two
+		// drops, which broke detection outright for any fast method: mining
+		// or fishing produces output every 2-3 ticks, and a single pair
+		// closer than the threshold discarded the entire buffer. Because
+		// fresh fast pairs kept arriving before old ones aged out, a
+		// power-mining session could sit in CANDIDATE indefinitely and never
+		// prompt.
+		//
+		// §8's actual intent is only to "reject a burst that lands in one or
+		// two ticks" - a reward arriving all at once. Requiring the buffer to
+		// span more than that says exactly this and nothing more, and it
+		// can't be poisoned by one fast pair.
+		int minSpanTicks = secondsToTicks(config.minSpanSeconds());
+		if (last.getTick() - first.getTick() < minSpanTicks)
 		{
-			int gap = events.get(i).getTick() - events.get(i - 1).getTick();
-			if (gap < minSpacingTicks)
-			{
-				// too bursty to be repeated player actions - likely a
-				// reward/message burst that slipped past the same-tick
-				// filter in SessionManager (SPEC.md §9)
-				return Optional.empty();
-			}
+			return Optional.empty();
 		}
 
 		int totalXp = events.stream().mapToInt(QualifyingXpEvent::getXpDelta).sum();
