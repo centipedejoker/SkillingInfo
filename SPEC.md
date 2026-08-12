@@ -756,6 +756,12 @@ confirmed banked
 
 Do not present uncertain potential as earned XP.
 
+`[v7]` **A session's projection is frozen when the session ends, and never recalculated.** Future XP depends on a product the player selects, and that selection can change. Recomputing history against the current selection would silently rewrite the past: switching iron ore from iron bars to steel bars would restate the projected XP of every mining session ever recorded. So `ProjectionBuilder` resolves once at finalisation and the result is persisted on the session (`schemaVersion` 2); the selection carries forward to affect only sessions recorded after the change.
+
+Each frozen entry stores the product's stable id *and* the label it carried at the time, so an old record stays interpretable even if the catalogue is renamed or reorganised later.
+
+This does not displace §34 below - raw item counts remain in the session's item flow and remain authoritative. The projection is the derived figure recorded *next to* them, not instead of them, which is what lets a future version recompute differently if it ever needs to while still being able to show what was originally reported. Locked down by `ProjectionBuilderTest`.
+
 ## 34. RAW DATA AUTHORITY
 
 Always preserve `itemId`, `quantity`, `lifecycle stage` before derived calculations.

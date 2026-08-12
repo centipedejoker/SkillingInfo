@@ -6,6 +6,7 @@ import com.skillinginfo.session.ItemFlowEntry;
 import com.skillinginfo.session.ItemUse;
 import com.skillinginfo.session.ItemUseStore;
 import com.skillinginfo.session.LiveRates;
+import com.skillinginfo.session.ProjectionBuilder;
 import com.skillinginfo.session.PromptSummary;
 import com.skillinginfo.session.SessionManager;
 import com.skillinginfo.session.SessionState;
@@ -655,7 +656,7 @@ class CurrentView extends JPanel
 		combo.setBackground(Palette.TILE);
 		combo.setSelectedItem(itemUseStore.get(itemId));
 		combo.setRenderer((list, value, index, selected, focused) -> {
-			JLabel l = new JLabel(value == null ? "" : value.label);
+			JLabel l = new JLabel(value == null ? "" : describeUse(value));
 			l.setFont(FontManager.getRunescapeSmallFont());
 			l.setOpaque(true);
 			l.setBackground(selected ? Palette.BORDER : Palette.TILE);
@@ -683,6 +684,24 @@ class CurrentView extends JPanel
 	}
 
 	/**
+	 * Each option names the concrete product and what it yields, the way
+	 * banked-experience labels its activities ("Longbow (u) (10xp)").
+	 * Without the number the choice is between bare words, and the whole
+	 * point of picking a product is that it has a definite value (§35).
+	 */
+	private static String describeUse(ItemUse use)
+	{
+		if (use.skill == null || use.xpPerItem <= 0)
+		{
+			return use.label;
+		}
+		return String.format("%s (%s xp)", use.label,
+			use.xpPerItem == Math.floor(use.xpPerItem)
+				? String.valueOf((long) use.xpPerItem)
+				: String.valueOf(use.xpPerItem));
+	}
+
+	/**
 	 * SPEC.md §33: a projection must never be mistaken for an earned fact.
 	 * It gets the dimmest tier, no bold, no accent, a leading tilde, an
 	 * explicit "not earned" header, and its confidence stated. Everything
@@ -692,7 +711,10 @@ class CurrentView extends JPanel
 	{
 		projectionPanel.removeAll();
 
-		List<FutureXpSummary.Row> rows = FutureXpSummary.build(session, itemUseStore);
+		// live view resolves against the current selection every tick; the
+		// figure only becomes fixed when the session ends (§33)
+		List<ProjectionBuilder.SkillTotal> rows =
+			ProjectionBuilder.totals(ProjectionBuilder.build(session, itemUseStore));
 		projectionPanel.setVisible(!rows.isEmpty());
 
 		if (!rows.isEmpty())
@@ -706,7 +728,7 @@ class CurrentView extends JPanel
 				FontManager.getRunescapeSmallFont(), Palette.DIMMEST), BorderLayout.WEST);
 			projectionPanel.add(Ui.fixHeight(header));
 
-			for (FutureXpSummary.Row row : rows)
+			for (ProjectionBuilder.SkillTotal row : rows)
 			{
 				JPanel line = new JPanel(new BorderLayout());
 				line.setBackground(Palette.PANEL);
@@ -717,7 +739,7 @@ class CurrentView extends JPanel
 					FontManager.getRunescapeSmallFont(), Palette.DIM)), BorderLayout.EAST);
 				projectionPanel.add(Ui.fixHeight(line));
 
-				JLabel note = Ui.label(row.confidence.label,
+				JLabel note = Ui.label(row.confidence,
 					FontManager.getRunescapeSmallFont(), Palette.DIMMEST);
 				note.setBorder(BorderFactory.createEmptyBorder(2, 2, 0, 2));
 				projectionPanel.add(Ui.fixHeight(note));

@@ -2,6 +2,8 @@ package com.skillinginfo.ui;
 
 import com.skillinginfo.session.ActivitySession;
 import com.skillinginfo.session.ItemFlowEntry;
+import com.skillinginfo.session.ProjectedXp;
+import com.skillinginfo.session.ProjectionBuilder;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -292,7 +294,48 @@ class HistoryView extends JPanel
 			appendItemDetail(container, entry);
 		}
 
+		appendProjection(container, session);
 		container.add(Ui.gap(8));
+	}
+
+	/**
+	 * The projection <b>as it was recorded when this session ended</b>, read
+	 * straight from the session and never recalculated (§33).
+	 * <p>
+	 * This is the point of freezing it. Change iron ore from iron bars to
+	 * steel bars tomorrow and every past mining session would otherwise
+	 * silently restate a different number - history would rewrite itself.
+	 * Instead the new choice applies only to sessions recorded from then on,
+	 * and each old session keeps both the figure and the product name it was
+	 * actually resolved against.
+	 */
+	private void appendProjection(JPanel container, ActivitySession session)
+	{
+		List<ProjectedXp> projection = session.getProjection();
+		if (projection.isEmpty())
+		{
+			return;
+		}
+
+		container.add(Ui.gap(6));
+		container.add(Ui.band("PROJECTED AT THE TIME"));
+
+		for (ProjectionBuilder.SkillTotal total : ProjectionBuilder.totals(projection))
+		{
+			container.add(Ui.ledgerRow(total.skill.getName(),
+				"~ +" + CurrentView.formatAbbreviated(total.xp), Palette.DIM, false));
+		}
+
+		// naming the product each figure assumed is what makes an old record
+		// still interpretable after the selection has moved on
+		for (ProjectedXp p : projection)
+		{
+			String name = itemNames.getOrDefault(p.getItemId(), "Item #" + p.getItemId());
+			JLabel line = Ui.label(String.format("%,d %s → %s", p.getQuantity(), name, p.getUseLabel()),
+				FontManager.getRunescapeSmallFont(), Palette.DIMMEST);
+			line.setBorder(BorderFactory.createEmptyBorder(2, 2, 0, 2));
+			container.add(Ui.fixHeight(line));
+		}
 	}
 
 	private void appendItemDetail(JPanel container, ItemFlowEntry entry)

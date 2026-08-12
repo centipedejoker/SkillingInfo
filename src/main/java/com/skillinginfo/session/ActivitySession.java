@@ -36,7 +36,9 @@ import net.runelite.api.Skill;
 public class ActivitySession
 {
 	private final String id = UUID.randomUUID().toString();
-	private final int schemaVersion = 1;
+	// v2 adds the frozen projection below. Additive only, so v1 records
+	// still load - they simply have no projection recorded.
+	private final int schemaVersion = 2;
 
 	@Setter
 	private Skill skill;
@@ -64,6 +66,14 @@ public class ActivitySession
 	private final Map<Skill, Integer> xpGained = new EnumMap<>(Skill.class);
 
 	private final Map<Integer, ItemFlowEntry> itemFlow = new LinkedHashMap<>();
+
+	/**
+	 * Projected XP as resolved when this session ended (§33). Never
+	 * recomputed afterwards - see {@link ProjectedXp}. Null on records
+	 * written before schemaVersion 2.
+	 */
+	@Setter
+	private List<ProjectedXp> projection;
 
 	public void addGenerated(int itemId, int qty)
 	{
@@ -163,6 +173,12 @@ public class ActivitySession
 	{
 		int generated = getTotalGenerated();
 		return generated <= 0 ? -1 : getTotalNetRetained() / (double) generated;
+	}
+
+	/** Never null, so callers don't have to special-case pre-v2 records. */
+	public List<ProjectedXp> getProjection()
+	{
+		return projection == null ? java.util.Collections.emptyList() : projection;
 	}
 
 	public Collection<ItemFlowEntry> getItemFlow()

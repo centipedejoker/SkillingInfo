@@ -102,7 +102,7 @@ public class SkillingInfoPlugin extends Plugin
 	{
 		itemUseStore = new ItemUseStore(configManager);
 		sessionRepository = new SessionRepository(client);
-		sessionManager = new SessionManager(config, sessionRepository);
+		sessionManager = new SessionManager(config, sessionRepository, itemUseStore);
 		sessionManager.init();
 
 		BufferedImage icon = buildIcon();

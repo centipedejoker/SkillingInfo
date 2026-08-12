@@ -35,6 +35,7 @@ public class SessionManager
 {
 	private final SkillingInfoConfig config;
 	private final SessionRepository repository;
+	private final ItemUseStore itemUseStore;
 	private final XpTracker xpTracker = new XpTracker();
 	private final SessionClock clock = new SessionClock();
 	private final InventoryDeltaTracker inventoryDeltaTracker = new InventoryDeltaTracker();
@@ -86,10 +87,11 @@ public class SessionManager
 	private final Map<Integer, Integer> candidateGeneratedBuffer = new HashMap<>();
 	private int lastCandidateXpTick = Integer.MIN_VALUE / 2;
 
-	public SessionManager(SkillingInfoConfig config, SessionRepository repository)
+	public SessionManager(SkillingInfoConfig config, SessionRepository repository, ItemUseStore itemUseStore)
 	{
 		this.config = config;
 		this.repository = repository;
+		this.itemUseStore = itemUseStore;
 	}
 
 	public void init()
@@ -726,6 +728,11 @@ public class SessionManager
 		{
 			return;
 		}
+
+		// §33: freeze the projection against the selection in force right
+		// now. Changing a product later must affect future sessions only -
+		// it must never rewrite what this one recorded.
+		currentSession.setProjection(ProjectionBuilder.build(currentSession, itemUseStore));
 
 		currentSession.setEndedAt(Instant.now());
 		currentSession.setActiveSeconds(clock.getActiveSeconds());
