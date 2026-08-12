@@ -22,12 +22,11 @@ import net.runelite.client.ui.FontManager;
  * <p>
  * Two Swing details these helpers exist to hide:
  * <ul>
- * <li>A component in a vertical {@code BoxLayout} stretches to its maximum
- * height, so anything added to the main column needs its maximum pinned to
- * its preferred height or a single row will absorb all the slack. Every
- * builder here does that.</li>
  * <li>Children of a vertical {@code BoxLayout} must share an X alignment or
  * they visibly stagger. Everything here is LEFT_ALIGNMENT.</li>
+ * <li>Heights must never be measured at construction time - see
+ * {@link #fixHeight}. Fixed-size pieces state their height as a number;
+ * everything else is left to size itself from its content.</li>
  * </ul>
  */
 final class Ui
@@ -135,14 +134,25 @@ final class Ui
 	}
 
 	/**
-	 * Pins a component's maximum height to its preferred height so a vertical
-	 * BoxLayout can't stretch it, and left-aligns it.
+	 * Left-aligns a row for a vertical {@code BoxLayout}.
+	 * <p>
+	 * This deliberately does <b>not</b> pin a maximum height. An earlier
+	 * version snapshotted {@code getPreferredSize()} here and set that as the
+	 * maximum, which clipped every multi-line row to roughly one line: at
+	 * construction time the labels inside are still empty, so the snapshot
+	 * measured empty text and then froze that height permanently, leaving the
+	 * real values nowhere to render.
+	 * <p>
+	 * The pinning was also unnecessary. Every column in this panel is added to
+	 * a {@code BorderLayout.NORTH}, which sizes it to its preferred height, so
+	 * there is no leftover vertical space for {@code BoxLayout} to stretch a
+	 * row into. Components that genuinely have a fixed height - {@link #gap},
+	 * {@link #rule}, {@link Bar} - set their own bounds explicitly from real
+	 * numbers rather than from a measurement.
 	 */
 	static <T extends JComponent> T fixHeight(T c)
 	{
 		c.setAlignmentX(Component.LEFT_ALIGNMENT);
-		Dimension pref = c.getPreferredSize();
-		c.setMaximumSize(new Dimension(Integer.MAX_VALUE, pref.height));
 		return c;
 	}
 
