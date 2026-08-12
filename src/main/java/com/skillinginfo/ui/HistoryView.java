@@ -16,6 +16,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -97,7 +98,8 @@ class HistoryView extends JPanel
 		else
 		{
 			listPanel.add(buildAggregate(filtered, filterSkill));
-			listPanel.add(Ui.gap(2));
+			listPanel.add(buildCollectedSummary(filtered));
+			listPanel.add(Ui.gap(6));
 			for (ActivitySession session : filtered)
 			{
 				listPanel.add(buildRow(session));
@@ -161,6 +163,97 @@ class HistoryView extends JPanel
 		block.add(Ui.fixHeight(footer));
 
 		return Ui.fixHeight(block);
+	}
+
+	/**
+	 * A running per-item tally across every session for this skill - what
+	 * the account has actually accumulated, rather than what any one trip
+	 * produced.
+	 * <p>
+	 * Ordered by quantity so the staple output leads and incidental drops
+	 * fall to the bottom. Banked is called out separately from the total
+	 * only when the two differ: saying "8,204 · 8,204 banked" on every row
+	 * is noise, but the gap between them matters when there is one, since
+	 * banked is the confirmed account gain (§33) and the remainder is still
+	 * sitting in an inventory somewhere.
+	 */
+	private JPanel buildCollectedSummary(List<ActivitySession> sessions)
+	{
+		Map<Integer, int[]> totals = new LinkedHashMap<>();
+		for (ActivitySession session : sessions)
+		{
+			for (ItemFlowEntry entry : session.getItemFlow())
+			{
+				int retained = entry.getNetRetained();
+				if (retained <= 0 && entry.getBanked() <= 0)
+				{
+					continue;
+				}
+				int[] running = totals.computeIfAbsent(entry.getItemId(), id -> new int[2]);
+				running[0] += retained;
+				running[1] += entry.getBanked();
+			}
+		}
+
+		JPanel panel = new JPanel();
+		panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+		panel.setBackground(Palette.PANEL);
+		panel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+		if (totals.isEmpty())
+		{
+			return panel;
+		}
+
+		panel.add(Ui.gap(6));
+		panel.add(Ui.band("COLLECTED · ALL TIME"));
+
+		totals.entrySet().stream()
+			.sorted((a, b) -> Integer.compare(b.getValue()[0], a.getValue()[0]))
+			.forEach(e -> panel.add(collectedRow(e.getKey(), e.getValue()[0], e.getValue()[1])));
+
+		return panel;
+	}
+
+	private JPanel collectedRow(int itemId, int retained, int banked)
+	{
+		JPanel row = new JPanel(new BorderLayout(6, 0));
+		row.setBackground(Palette.PANEL);
+		row.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createMatteBorder(0, 0, 1, 0, Palette.ROW_RULE),
+			BorderFactory.createEmptyBorder(4, 2, 4, 2)));
+
+		JLabel icon = new JLabel();
+		Dimension d = new Dimension(ITEM_ICON, ITEM_ICON);
+		icon.setPreferredSize(d);
+		icon.setMinimumSize(d);
+		icon.setOpaque(true);
+		icon.setBackground(Palette.WELL);
+		icon.setBorder(BorderFactory.createLineBorder(Palette.BORDER));
+		AsyncBufferedImage image = itemManager.getImage(itemId);
+		if (image != null)
+		{
+			image.addTo(icon);
+		}
+		row.add(icon, BorderLayout.WEST);
+
+		JPanel text = new JPanel();
+		text.setLayout(new BoxLayout(text, BoxLayout.Y_AXIS));
+		text.setOpaque(false);
+		text.add(Ui.body(itemNames.getOrDefault(itemId, "Item #" + itemId)));
+		if (banked != retained)
+		{
+			text.add(Ui.label(String.format("%,d banked", banked),
+				FontManager.getRunescapeSmallFont(), Palette.DIMMEST));
+		}
+		row.add(text, BorderLayout.CENTER);
+
+		JPanel value = new JPanel(new BorderLayout());
+		value.setOpaque(false);
+		value.add(Ui.bold(String.format("%,d", retained), Palette.ACCENT), BorderLayout.EAST);
+		row.add(value, BorderLayout.EAST);
+
+		return Ui.fixHeight(row);
 	}
 
 	private JPanel miniStat(String caption, String value, Color valueColour)

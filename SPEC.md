@@ -893,6 +893,10 @@ Abyssal Demons
 688k loot banked
 ```
 
+`[v7]` **History leads with a running per-skill tally**, not just a list of trips: an all-time aggregate (active time, XP, banked XP) followed by a cumulative per-item count of what the account has actually accumulated across every session for that skill. This is the §62 question "what resources do I actually produce" answered directly, rather than left for the player to sum by eye across rows.
+
+Banked is called out separately from the total only where the two differ — repeating "8,204 · 8,204 banked" on every row is noise, but the gap matters when there is one, since banked is confirmed account gain (§33) and the remainder is still sitting in an inventory somewhere.
+
 ## 44. STRUCTURED LOCAL OUTPUT `[v2][v3][v4]`
 
 One completed-session record per line. Preferred: JSON Lines (`sessions.jsonl`).
