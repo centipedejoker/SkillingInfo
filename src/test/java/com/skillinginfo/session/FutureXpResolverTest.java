@@ -72,12 +72,20 @@ public class FutureXpResolverTest
 	@Test
 	public void unmappedItemIsNotGuessed()
 	{
-		// Ores would need an invented coal ratio and herbs a secondary, so
-		// neither has an honest per-item value - they stay uncatalogued.
-		assertTrue("ore must not be projected to Smithing", FutureXpResolver.getUses(ItemID.IRON_ORE).isEmpty());
+		// §35: an item only gets a projection when some product gives it a
+		// definite per-item value. A herb needs a secondary before it's worth
+		// anything, clay's uses don't converge on one figure, and coal is an
+		// ingredient rather than a product - none of them should be invented.
+		//
+		// Ores were previously in this list on the grounds that they'd need a
+		// made-up coal ratio. They don't: the smelt XP is credited once
+		// against the primary ore, never against the coal it consumes, so the
+		// value is exact and the same bar can't be counted three times.
 		assertTrue("herb must not be projected to Herblore", FutureXpResolver.getUses(ItemID.UNIDENTIFIED_GUAM).isEmpty());
-		assertTrue(FutureXpResolver.getSelectableUses(ItemID.IRON_ORE).isEmpty());
-		assertNull(FutureXpResolver.getDefaultUse(ItemID.IRON_ORE));
+		assertTrue("clay has no single honest value", FutureXpResolver.getUses(ItemID.CLAY).isEmpty());
+		assertTrue("coal is a secondary, not a product", FutureXpResolver.getUses(ItemID.COAL).isEmpty());
+		assertTrue(FutureXpResolver.getSelectableUses(ItemID.CLAY).isEmpty());
+		assertNull(FutureXpResolver.getDefaultUse(ItemID.CLAY));
 	}
 
 	@Test

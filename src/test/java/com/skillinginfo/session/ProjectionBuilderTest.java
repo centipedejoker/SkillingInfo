@@ -128,6 +128,35 @@ public class ProjectionBuilderTest
 	}
 
 	@Test
+	public void ironOreOffersBothBarsAndProjectsTheChosenOne()
+	{
+		// the case that motivated the picker: only the player knows whether
+		// their iron ore is destined for iron bars or steel
+		assertTrue("iron ore must present a choice", FutureXpResolver.hasChoice(ItemID.IRON_ORE));
+
+		FakeStore store = new FakeStore();
+		ActivitySession s = new ActivitySession();
+		s.setSkill(Skill.MINING);
+		s.addGenerated(ItemID.IRON_ORE, 100);
+		s.addBanked(ItemID.IRON_ORE, 100);
+
+		store.choose(ItemID.IRON_ORE, "IRON_BAR");
+		assertEquals(1250.0, ProjectionBuilder.build(s, store).get(0).getXp(), 0.001);
+
+		store.choose(ItemID.IRON_ORE, "STEEL_BAR");
+		assertEquals(1750.0, ProjectionBuilder.build(s, store).get(0).getXp(), 0.001);
+	}
+
+	@Test
+	public void itemsWithNoHonestSingleValueAreLeftOut()
+	{
+		// §35: clay's uses don't resolve to one XP value, and coal is a
+		// secondary rather than a product - neither should be guessed at
+		assertTrue(FutureXpResolver.getUses(ItemID.CLAY).isEmpty());
+		assertTrue(FutureXpResolver.getUses(ItemID.COAL).isEmpty());
+	}
+
+	@Test
 	public void aSessionWithNoProjectionReadsAsEmptyNotNull()
 	{
 		// pre-v2 records have no projection recorded at all

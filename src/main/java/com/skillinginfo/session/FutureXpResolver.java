@@ -58,6 +58,22 @@ public final class FutureXpResolver
 			new ItemUse("LONGBOW", "Longbow (u)", Skill.FLETCHING, longbowXp)));
 	}
 
+	/**
+	 * Ore → bar. The smelting XP is credited per <em>primary</em> ore, so a
+	 * steel bar's 17.5 counts once against the iron ore that made it, not
+	 * against the two coal it also consumed - otherwise the same bar would
+	 * be counted three times over from one session's mining.
+	 */
+	private static void smelt(int oreId, ItemUse... uses)
+	{
+		USES.put(oreId, Arrays.asList(uses));
+	}
+
+	private static ItemUse bar(String id, String label, double xp)
+	{
+		return new ItemUse(id, label, Skill.SMITHING, xp);
+	}
+
 	private static void bones(int itemId, double buryXp)
 	{
 		USES.put(itemId, Arrays.asList(
@@ -67,6 +83,27 @@ public final class FutureXpResolver
 
 	static
 	{
+		// Smithing. Ores are the case that makes the product picker earn its
+		// keep: an iron ore is worth 12.5 XP as an iron bar or 17.5 as a
+		// steel bar, and only the player knows which they intend. §35 says
+		// don't guess between them - so don't.
+		smelt(ItemID.COPPER_ORE, bar("BRONZE_BAR", "Bronze bar", 6.2));
+		smelt(ItemID.TIN_ORE, bar("BRONZE_BAR", "Bronze bar", 6.2));
+		smelt(ItemID.IRON_ORE,
+			bar("IRON_BAR", "Iron bar", 12.5),
+			bar("STEEL_BAR", "Steel bar", 17.5));
+		smelt(ItemID.SILVER_ORE, bar("SILVER_BAR", "Silver bar", 13.7));
+		smelt(ItemID.GOLD_ORE,
+			bar("GOLD_BAR", "Gold bar", 22.5),
+			bar("GOLD_BAR_GAUNTLETS", "Gold bar (gauntlets)", 56.2));
+		smelt(ItemID.MITHRIL_ORE, bar("MITHRIL_BAR", "Mithril bar", 30.0));
+		smelt(ItemID.ADAMANTITE_ORE, bar("ADAMANT_BAR", "Adamant bar", 37.5));
+		smelt(ItemID.RUNITE_ORE, bar("RUNE_BAR", "Rune bar", 50.0));
+
+		// Deliberately absent: coal, which is a secondary rather than a
+		// product in its own right, and clay, whose uses don't resolve to a
+		// single XP value (§35).
+
 		// Cooking - one legitimate use, so nothing to choose.
 		cook(ItemID.RAW_SHRIMP, 30.0);
 		cook(ItemID.RAW_ANCHOVIES, 30.0);

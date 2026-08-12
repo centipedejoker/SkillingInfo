@@ -768,6 +768,10 @@ Always preserve `itemId`, `quantity`, `lifecycle stage` before derived calculati
 
 Example: raw karambwan confirmed banked = 819 is authoritative. Derived: Cooking XP = 155,610 can be recalculated later.
 
+`[v7]` **Ores are catalogued, and are the clearest case for the product picker.** An iron ore is worth 12.5 XP as an iron bar or 17.5 as a steel bar; only the player knows which they intend, so the choice is theirs rather than the plugin's. Smelt XP is credited once against the *primary* ore and never against the coal a bar also consumes — otherwise a single steel bar would be counted three times over from one mining session.
+
+Still deliberately uncatalogued: coal (an ingredient, not a product), clay (its uses don't converge on one figure), and herbs (worth nothing until combined with a secondary). Those show no projection at all, which §35 says is the correct outcome rather than a gap.
+
 ## 35. AMBIGUOUS RESOURCE USE
 
 Do not force downstream XP mappings where one item has several legitimate uses. Example: teak logs may contribute to Construction, Firemaking, or Fletching. RuneLite should preserve `teak logs banked = 510`. External planning software can decide how to value them.
