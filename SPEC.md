@@ -1153,7 +1153,7 @@ Farming remains a partial exception that happens to work either way — seeds ar
 - **Unclassified remains a correct answer** (§15/§16): unrecognised output, or a skill with no table yet, tracks perfectly well without a named method. Tests assert this rather than treating it as a gap.
 - §40's outputs are now shown: units produced, units/hour (with a skill-appropriate noun — "Logs/hr", "Catches/hr") and retention rate (§32). Rows hide themselves when there's nothing to show.
 
-**Phase 6** 🔨 — Slayer; KPH; loot flow; trip boundaries implemented (pending live validation). Task loadouts (§38) still to do.
+**Phase 6** 🔨 — Slayer, KPH, loot flow and trip boundaries ✅ **live-validated**. Task loadouts (§38) still to do.
 
 `[v7]` Implementation notes:
 - **Task state comes from `SlayerPluginService`**, one of RuneLite's seven public plugin APIs, rather than being re-derived from chat messages (§5). It supplies the task name, location and remaining count, so none of that is rebuilt here.
