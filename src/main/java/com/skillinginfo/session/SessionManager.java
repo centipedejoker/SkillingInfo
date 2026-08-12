@@ -536,6 +536,10 @@ public class SessionManager
 			return;
 		}
 
+		if (state != SessionState.CANDIDATE)
+		{
+			log.debug("Candidate opened: skill={} groupKey={} tick={}", skill, groupKey, currentTick);
+		}
 		candidateGroupKey = groupKey;
 		state = SessionState.CANDIDATE;
 		lastCandidateXpTick = currentTick;
@@ -577,11 +581,15 @@ public class SessionManager
 		}
 
 		Optional<PromptSummary> summary = CandidateDetector.evaluate(candidateGroupKey, buffer, config);
+		log.debug("Candidate tick: group={} buffered={} gateMet={}",
+			candidateGroupKey, buffer.events().size(), summary.isPresent());
 		if (summary.isPresent())
 		{
 			pendingPrompt = summary.get();
 			promptExpiresAtTick = currentTick + CandidateDetector.secondsToTicks(config.promptTimeoutSeconds());
 			state = SessionState.PROMPTED;
+			log.debug("PROMPTED: {} ({} drops, +{} xp)",
+				pendingPrompt.getSkill(), pendingPrompt.getDropCount(), pendingPrompt.getTotalXp());
 		}
 	}
 

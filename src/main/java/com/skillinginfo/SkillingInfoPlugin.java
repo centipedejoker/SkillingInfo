@@ -139,7 +139,24 @@ public class SkillingInfoPlugin extends Plugin
 		sessionManager.onGameTick(client.getTickCount());
 		resolveItemNames();
 		sampleLiveRates();
-		SwingUtilities.invokeLater(() -> panel.refresh());
+		SwingUtilities.invokeLater(this::refreshPanel);
+	}
+
+	/**
+	 * A rendering fault must not take the plugin down with it: without this,
+	 * one exception on the EDT stops the panel updating at all, which is
+	 * indistinguishable from tracking having stopped working.
+	 */
+	private void refreshPanel()
+	{
+		try
+		{
+			panel.refresh();
+		}
+		catch (Exception e)
+		{
+			log.warn("Skilling Info panel refresh failed", e);
+		}
 	}
 
 	/**
@@ -261,12 +278,12 @@ public class SkillingInfoPlugin extends Plugin
 			// comes from the right account's file, not the "unknown" bucket
 			// used before login (SessionRepository)
 			sessionManager.init();
-			SwingUtilities.invokeLater(() -> panel.refresh());
+			SwingUtilities.invokeLater(this::refreshPanel);
 		}
 		else if (event.getGameState() == GameState.LOGIN_SCREEN)
 		{
 			sessionManager.onLogout();
-			SwingUtilities.invokeLater(() -> panel.refresh());
+			SwingUtilities.invokeLater(this::refreshPanel);
 		}
 	}
 
