@@ -81,7 +81,7 @@ class HistoryView extends JPanel
 		add(scroll, BorderLayout.CENTER);
 	}
 
-	void refresh(List<ActivitySession> history, Skill filterSkill)
+	void refresh(List<ActivitySession> history, Skill filterSkill, boolean persistenceFailed)
 	{
 		listPanel.removeAll();
 
@@ -104,6 +104,19 @@ class HistoryView extends JPanel
 			{
 				listPanel.add(buildRow(session));
 			}
+		}
+
+		// §44 [v9]: a write that failed used to be a log line and nothing
+		// else, while the session still appeared here - so the player saw it
+		// listed, got no signal, and watched it vanish at the next reload.
+		if (persistenceFailed)
+		{
+			listPanel.add(Ui.gap(6));
+			JLabel warning = Ui.label(
+				"<html><body style='width:190px'>A session could not be saved to disk. "
+					+ "Check the RuneLite log and that ~/.runelite is writable.</body></html>",
+				FontManager.getRunescapeSmallFont(), Palette.ACCENT);
+			listPanel.add(Ui.fixHeight(warning));
 		}
 
 		listPanel.revalidate();

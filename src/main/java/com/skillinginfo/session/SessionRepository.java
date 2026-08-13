@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.RuneLite;
 
@@ -41,6 +42,18 @@ public class SessionRepository
 		.create();
 
 	private volatile File file;
+
+	/**
+	 * `[v9]` How many session writes have failed this run.
+	 * <p>
+	 * A failure used to be a log line and nothing else, while the session was
+	 * still added to the in-memory history - so on a full disk or a read-only
+	 * `~/.runelite` the player saw the session listed, got no signal it was
+	 * lost, and then watched it disappear the next time history reloaded.
+	 * Surfaced so the panel can say so.
+	 */
+	@Getter
+	private volatile int writeFailures;
 
 	/**
 	 * `[v9]` Where the actual write happens. Defaults to the calling thread,
@@ -109,7 +122,8 @@ public class SessionRepository
 			}
 			catch (IOException e)
 			{
-				log.warn("Failed to persist session {}", id, e);
+				writeFailures++;
+				log.error("Failed to persist session {} - it is shown in the panel but is not on disk", id, e);
 			}
 		});
 	}

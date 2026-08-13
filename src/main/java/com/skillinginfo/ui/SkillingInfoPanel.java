@@ -137,7 +137,8 @@ public class SkillingInfoPanel extends PluginPanel
 		currentView.refresh();
 		if (selectedSkill != null)
 		{
-			historyView.refresh(sessionManager.getHistory(), selectedSkill);
+			historyView.refresh(sessionManager.getHistory(), selectedSkill,
+				sessionManager.hasPersistenceFailures());
 		}
 	}
 }

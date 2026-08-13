@@ -1021,6 +1021,18 @@ One completed-session record per line. Preferred: JSON Lines (`sessions.jsonl`).
 
 `[v4]` `"skill"` and `"category"` reflect tracking-group semantics (§7a/§1a): for a combat session `skill` is `"SLAYER"` and `category` is `"COMBAT"`, even though `xpGained` also holds Attack/Strength/Ranged/Magic/Hitpoints entries. `category` is derived from `skill`, not stored independently, so the two can never drift apart.
 
+**`[v9]` The example above no longer shows `category` or `netRetained`, because neither is written and neither ever was.** Gson serialises fields, not getters, and both are getters — so the documented schema and the written one had quietly diverged, which matters because §45 says external consumers read this file.
+
+Resolved by correcting the document rather than the code, on three grounds. §14 already states the principle ("persist raw values; calculated values may be regenerated"); the `[v4]` note directly above already says `category` is "derived from `skill`, not stored independently, so the two can never drift apart", which the example contradicted; and a derived value written into an append-only file is frozen at the definition in force when it was written. `netRetained`'s formula changed in this very revision (§18 `[v9]` removed unexplained losses from it), and because it is recomputed, every past record corrected itself. Had it been stored, history would now disagree with the plugin.
+
+The distinction against §33, which *does* freeze its projection: that freezes because the player's product *selection* is an input that may legitimately change, and a past session must keep reporting what it reported. A formula correction is not an input change — it is a fix, and history should get it.
+
+Consumers therefore compute: `category = SLAYER-group ? "COMBAT" : "SKILLING"`, and `netRetained = max(0, directlyAcquired − dropped + repicked − consumed)`.
+
+**`[v9]` A write that fails is now visible.** `append` caught its `IOException`, logged a warning, and the session was added to the in-memory history regardless — so on a full disk or a read-only `~/.runelite` the player saw the session listed, got no signal at all, and then watched it disappear the next time history reloaded. The failure is counted and the history panel says so. Keeping the session on screen is deliberate: it happened, and the player should see it; what they should not do is believe it was saved.
+
+**`[v9]` `tripBoundaries` is roughly 40% of each record's ~2.3 KB, and nothing consumes it yet.** That remains a considered decision (§39 — recording the boundaries now avoids a schema migration later), but it is the single largest contributor to the file sizes behind §44's load timings, so the cost belongs on the record next to the decision.
+
 `[v3]` Storage must be scoped per account, not a single global file. Bossing Info (§5) learned this the hard way — it keys its data directory by `client.getAccountHash()` (migrating from an older username-keyed layout), because otherwise a main/alt or multiple GIM members sharing a machine would merge their history. Skilling Info's `sessions.jsonl` lives under `skilling-info/<accountHash>/`, resolved lazily since the account hash isn't valid until after login (implemented in `SessionRepository`).
 
 Conceptual session record:
@@ -1055,8 +1067,8 @@ Conceptual session record:
       "dropped": 25,
       "repicked": 2,
       "consumed": 0,
+      "otherLoss": 0,
       "banked": 819,
-      "netRetained": 819,
       "attributionConfidence": "SESSION_AGGREGATE"
     }
   ]

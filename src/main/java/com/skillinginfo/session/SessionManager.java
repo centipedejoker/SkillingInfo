@@ -187,6 +187,16 @@ public class SessionManager
 	 * {@code loadAll} is a ~480ms parse, and it used to run on every region
 	 * change (§44 `[v9]`).
 	 */
+	/**
+	 * §44 `[v9]`: whether any completed session failed to reach disk this
+	 * run. The panel says so rather than letting the record vanish at the
+	 * next reload with no explanation.
+	 */
+	public boolean hasPersistenceFailures()
+	{
+		return repository.getWriteFailures() > 0;
+	}
+
 	public void setHistory(List<ActivitySession> loaded)
 	{
 		history.clear();
