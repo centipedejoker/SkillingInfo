@@ -156,10 +156,18 @@ public class SessionManager
 		this.unnotedId = unnotedId;
 	}
 
-	public void init()
+	/**
+	 * `[v9]` Installs freshly loaded history.
+	 * <p>
+	 * Takes the list rather than reading it, because the read is disk I/O and
+	 * must not happen on the client thread - at ten thousand sessions
+	 * {@code loadAll} is a ~480ms parse, and it used to run on every region
+	 * change (§44 `[v9]`).
+	 */
+	public void setHistory(List<ActivitySession> loaded)
 	{
 		history.clear();
-		history.addAll(repository.loadAll());
+		history.addAll(loaded);
 	}
 
 	/**

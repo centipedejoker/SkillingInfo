@@ -53,7 +53,7 @@ final class SessionManagerHarness
 		SkillingInfoConfig config = new SkillingInfoConfig()
 		{
 		};
-		SessionRepository repository = new SessionRepository(null)
+		SessionRepository repository = new SessionRepository()
 		{
 			@Override
 			public void append(ActivitySession session)

@@ -17,7 +17,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.Client;
 import net.runelite.client.RuneLite;
 
 /**
@@ -27,10 +26,10 @@ import net.runelite.client.RuneLite;
  * whole read.
  * <p>
  * Scoped per account hash - not a single global file - so switching between
- * accounts (main/alt, GIM members) doesn't merge their skilling history.
- * Resolved lazily rather than at construction time because the account hash
- * isn't valid until after login; each call re-resolves in case the logged-in
- * account has changed since the last one.
+ * accounts (main/alt, GIM members) doesn't merge their skilling history. The
+ * account is set by {@link #useAccount(long)} rather than read from the
+ * client on every call, which is what lets the reads and writes run off the
+ * client thread (§44 `[v9]`).
  */
 @Slf4j
 public class SessionRepository
@@ -40,28 +39,32 @@ public class SessionRepository
 		.registerTypeAdapter(Instant.class, (JsonDeserializer<Instant>) (json, type, ctx) -> Instant.parse(json.getAsString()))
 		.create();
 
-	private final Client client;
-	private long resolvedAccountHash = Long.MIN_VALUE;
-	private File file;
+	private volatile File file;
 
-	public SessionRepository(Client client)
+	/**
+	 * `[v9]` Points the repository at an account's file.
+	 * <p>
+	 * The account hash is passed in rather than read from {@code Client} here,
+	 * so that reading and writing can happen off the client thread without
+	 * touching the client at all (§44 `[v9]`). Call this from the client
+	 * thread whenever the account changes (§5 `[v9]`).
+	 */
+	public void useAccount(long accountHash)
 	{
-		this.client = client;
+		String accountKey = accountHash <= 0 ? "unknown" : String.valueOf(accountHash);
+		File dir = new File(new File(RuneLite.RUNELITE_DIR, "skilling-info"), accountKey);
+		if (!dir.exists() && !dir.mkdirs())
+		{
+			log.warn("Unable to create Skilling Info data directory: {}", dir);
+		}
+		file = new File(dir, "sessions.jsonl");
 	}
 
 	private File resolveFile()
 	{
-		long accountHash = client.getAccountHash();
-		if (file == null || accountHash != resolvedAccountHash)
+		if (file == null)
 		{
-			resolvedAccountHash = accountHash;
-			String accountKey = accountHash <= 0 ? "unknown" : String.valueOf(accountHash);
-			File dir = new File(new File(RuneLite.RUNELITE_DIR, "skilling-info"), accountKey);
-			if (!dir.exists() && !dir.mkdirs())
-			{
-				log.warn("Unable to create Skilling Info data directory: {}", dir);
-			}
-			file = new File(dir, "sessions.jsonl");
+			useAccount(0);
 		}
 		return file;
 	}

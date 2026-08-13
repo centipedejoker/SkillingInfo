@@ -15,9 +15,11 @@ import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledExecutorService;
 import javax.inject.Inject;
 import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
@@ -38,6 +40,7 @@ import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.gameval.InventoryID;
 import net.runelite.http.api.loottracker.LootRecordType;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ItemManager;
@@ -103,6 +106,15 @@ public class SkillingInfoPlugin extends Plugin
 	@Inject
 	private ConfigManager configManager;
 
+	// §44 [v9]: history reads and writes run here, not on the client thread
+	@Inject
+	private ScheduledExecutorService executor;
+
+	// §48 [v9]: the panel's buttons run on the EDT; session state is the
+	// client thread's, so every mutation hops
+	@Inject
+	private ClientThread clientThread;
+
 	// Resolved on the client thread (see onGameTick) and read from the EDT
 	// by the panel - ItemManager.getItemComposition() asserts it's only
 	// ever called on the client thread, so the UI must never call it
@@ -135,9 +147,11 @@ public class SkillingInfoPlugin extends Plugin
 	protected void startUp()
 	{
 		itemUseStore = new ItemUseStore(configManager);
-		sessionRepository = new SessionRepository(client);
+		sessionRepository = new SessionRepository();
 		sessionManager = new SessionManager(config, sessionRepository, itemUseStore, this::unnotedId);
-		sessionManager.init();
+		// startUp runs on the EDT (PluginManager.startPlugin asserts it), so
+		// the initial load goes to the executor like every other read
+		reloadHistory(0);
 
 		BufferedImage icon = buildIcon();
 		panel = new SkillingInfoPanel(sessionManager, skillIconManager, itemUseStore, itemNames, itemManager, icon);
@@ -208,13 +222,37 @@ public class SkillingInfoPlugin extends Plugin
 	}
 
 	/**
+	 * §44 `[v9]`: reads the account's history off the client thread, then
+	 * hands it back on it.
+	 * <p>
+	 * Both halves matter. The read is disk I/O and a full JSON parse - ~44ms
+	 * at 500 sessions, ~480ms at ten thousand - and it used to run on the
+	 * client thread on <em>every region change</em>, because `LOGGED_IN`
+	 * fires on those too. The hand-back has to be on the client thread
+	 * because it also resolves item names through {@code ItemManager}.
+	 */
+	private void reloadHistory(long accountHash)
+	{
+		executor.execute(() -> {
+			sessionRepository.useAccount(accountHash);
+			List<ActivitySession> loaded = sessionRepository.loadAll();
+			clientThread.invoke(() -> {
+				sessionManager.setHistory(loaded);
+				// resolved once here rather than every tick: the names of a
+				// finished session cannot change, so re-walking all of
+				// history each tick to hit a cache was pure waste (5.4ms per
+				// tick at ten thousand sessions)
+				loaded.forEach(this::resolveItemNames);
+				SwingUtilities.invokeLater(this::refreshPanel);
+			});
+		});
+	}
+
+	/**
 	 * Runs on the client thread (this handler is invoked there, not the
-	 * EDT) so it's safe to call ItemManager here. Resolves and caches the
-	 * name of any item that has shown up in the current session's item
-	 * flow, or any past session's (history), that hasn't been looked up
-	 * yet - the history panel needs names too, not just the live view.
-	 * computeIfAbsent makes repeat calls a cheap no-op once cached, so
-	 * doing this every tick against a small history list is fine.
+	 * EDT) so it's safe to call ItemManager here. Only the live session is
+	 * walked per tick - history names are resolved once, when history is
+	 * loaded.
 	 */
 	private void resolveItemNames()
 	{
@@ -222,10 +260,6 @@ public class SkillingInfoPlugin extends Plugin
 		if (current != null)
 		{
 			resolveItemNames(current);
-		}
-		for (ActivitySession session : sessionManager.getHistory())
-		{
-			resolveItemNames(session);
 		}
 	}
 
@@ -370,8 +404,7 @@ public class SkillingInfoPlugin extends Plugin
 			// account hash isn't resolvable until now - reload so history
 			// comes from the right account's file, not the "unknown" bucket
 			// used before login (SessionRepository)
-			sessionManager.init();
-			SwingUtilities.invokeLater(this::refreshPanel);
+			reloadHistory(accountHash);
 		}
 		else if (event.getGameState() == GameState.LOGIN_SCREEN)
 		{

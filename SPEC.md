@@ -1078,6 +1078,18 @@ SkillingInfoPlugin
 
 Later: `SlayerTracker`, `LoadoutSnapshotService`, `TripTracker`.
 
+### 48a. Thread ownership `[v9]`
+
+Three threads touch this plugin and the boundaries between them were never written down, so they were crossed freely. Stated now, because two separate findings came out of the same silence.
+
+**The client thread owns `SessionManager` and everything under `session/`.** All the game events arrive there, so almost everything already ran there by accident rather than by rule. Nothing in `session/` is synchronised and nothing should become so — a lock on the client thread's per-tick path is a worse answer than not sharing.
+
+**The EDT owns `ui/`, and may not touch session state directly.** `startUp`, `shutDown` and every Swing listener run on the EDT (`PluginManager.startPlugin` opens with an assert to that effect), so `start`, `ignore`, `pause`, `resume` and `stop` were all being called across the boundary. Not theoretical: `onGameTick` reads `state` at its `switch` and acts on it several statements later, so a `start()` landing in that gap left the session `ACTIVE` with the state machine already past the point of noticing — a session that records nothing while the panel shows the idle card, presenting to the user as "I pressed Start and nothing happened". Every such mutation now hops via `ClientThread`.
+
+**Disk I/O belongs on the executor, on neither of the others.** Reading history is a full JSON parse — around 44ms at 500 sessions, 480ms at ten thousand — and it ran on the client thread on *every region change* (§5 `[v9]` explains why `LOGGED_IN` fires that often). Writing ran on the EDT. `SessionRepository` no longer holds a `Client` at all: the account is pushed to it by `useAccount`, which is what lets its reads and writes run anywhere.
+
+One consequence worth keeping visible: `refreshPanel`'s try/catch is load-bearing while any of this is imperfect, because a `ConcurrentModificationException` raised on the EDT mid-render presents as a dropped frame rather than as a crash. It is a safety net, not a licence — the boundaries above are the actual fix.
+
 ## 49. EVENT CORRELATION
 
 Do not classify from a single ambiguous event where multiple passive signals are available.
