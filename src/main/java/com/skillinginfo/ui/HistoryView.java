@@ -125,7 +125,9 @@ class HistoryView extends JPanel
 		for (ActivitySession s : sessions)
 		{
 			activeSeconds += s.getActiveSeconds();
-			totalXp += s.getXpGained(skill);
+			// §14 [v9]: the same figure the per-session rows show, so the
+			// aggregate can't disagree with what it aggregates
+			totalXp += s.getHeadlineXp();
 			generated += s.getTotalGenerated();
 			kept += s.getTotalNetRetained();
 			banked += s.getTotalBanked();
@@ -334,7 +336,7 @@ class HistoryView extends JPanel
 		text.add(titleLine);
 
 		long activeSeconds = session.getActiveSeconds();
-		int xp = session.getXpGained(session.getSkill());
+		int xp = session.getHeadlineXp();
 		String when = session.getStartedAt() == null
 			? ""
 			: (isOpen ? DATE_TIME_FORMAT : DATE_FORMAT).format(session.getStartedAt());
@@ -402,10 +404,10 @@ class HistoryView extends JPanel
 	{
 		JPanel stats = new JPanel(new GridLayout(1, 2, 3, 0));
 		stats.setOpaque(false);
-		JLabel xpValue = Ui.bold(String.format("+%,d", session.getXpGained(session.getSkill())), Palette.TEXT);
+		JLabel xpValue = Ui.bold(String.format("+%,d", session.getHeadlineXp()), Palette.TEXT);
 		long activeSeconds = session.getActiveSeconds();
 		JLabel rateValue = Ui.bold(activeSeconds > 0
-			? String.format("%,d", Math.round(session.getXpGained(session.getSkill()) / (double) activeSeconds * 3600))
+			? String.format("%,d", Math.round(session.getHeadlineXp() / (double) activeSeconds * 3600))
 			: "0", Palette.TEXT);
 		stats.add(Ui.tile("XP", xpValue, false));
 		stats.add(Ui.tile("XP/HR", rateValue, false));

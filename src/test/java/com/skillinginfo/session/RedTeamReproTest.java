@@ -26,39 +26,6 @@ public class RedTeamReproTest
 	private static final int COINS = 995;
 
 	// =============================================================
-	// F11 - the combat XP headline is Slayer XP only
-	// =============================================================
-
-	/**
-	 * The prompt sums every buffered skill; the session tile reads only the
-	 * group key's XP. Press Start and the number collapses with no explanation.
-	 */
-	@Test
-	public void combatXpHeadlineCollapsesTheMomentStartIsPressed()
-	{
-		SessionManager m = seeded();
-		int atk = 0;
-		int slay = 0;
-		for (int t = 1; t <= 6; t += 2)
-		{
-			atk += 400;
-			slay += 100;
-			m.onStatChanged(Skill.ATTACK, atk);
-			m.onStatChanged(Skill.HITPOINTS, atk);
-			m.onStatChanged(Skill.SLAYER, slay);
-			m.onGameTick(t);
-		}
-		assertEquals(SessionState.PROMPTED, m.getState());
-		int promptTotal = m.getPendingPrompt().getTotalXp();
-		assertEquals(800 + 800 + 200, promptTotal);
-
-		m.start();
-		ActivitySession s = m.getCurrentSession();
-		assertEquals("bug: the XP tile shows only the Slayer share", 200, s.getXpGained(s.getSkill()));
-		assertTrue(promptTotal > 8 * s.getXpGained(s.getSkill()));
-	}
-
-	// =============================================================
 	// F12 - a stale Take click steals later skilling output
 	// =============================================================
 

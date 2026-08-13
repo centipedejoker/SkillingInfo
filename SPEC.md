@@ -432,6 +432,12 @@ Slayer is the one place where the baseline is deliberately advanced past events 
 
 Persist raw values. Calculated values may be regenerated.
 
+**`[v9]` "XP gained" is every skill the session gained, not the tracking-group key's own total.** For skilling the two are the same. For combat they are not: `skill` there is the group key `SLAYER` (§7a), and a task pays Attack, Strength, Hitpoints and Slayer together, so reading the key's own figure showed roughly an eighth of the truth.
+
+The symptom was the panel disagreeing with itself. The detection prompt sums every buffered drop, so it offered *"Slayer detected — +1,800 XP"*; you pressed Start and the `XP` tile read `+200`. Same panel, same events, nine times apart, with no change of label. `XP/HR`, the overall-rate overflow line and the history aggregate all inherited it, so a task genuinely running at 55k XP/hr displayed about 8k — which is this section's own v7 failure ("displayed **15**") reached by a different route, and by the same underlying mistake of showing a number scoped differently from the one the label implies.
+
+Both fixes were defensible — sum the skills, or keep the group figure and label the tile `SLAYER XP`. Summing wins because the plugin's question is what the *account* gained, and because `XP/HR` labelled as Slayer-only XP per hour is a rate nobody quotes or compares. What is not defensible is showing one and labelling it as the other. The per-skill split is untouched underneath (§34: raw counts stay authoritative); this is only which of them the headline reads.
+
 `[v7]` **Rates are computed from the session's own clock, and `XpTrackerService` is no longer used.** An earlier revision delegated them to RuneLite's XP Tracker on §5's "don't recreate proven mechanisms" grounds. Live testing showed why that can't work: a session genuinely running at 20,348 XP/hr displayed **15**, and actions/hour displayed **0**.
 
 The cause is a scope mismatch, not a bug in XP Tracker. Its snapshot covers *its* session, which persists across logins and may have been accumulating for days — so our few minutes of XP were being divided by its hours of elapsed time. The same applies to `getActions`, so none of its figures can be borrowed for a session with different boundaries.

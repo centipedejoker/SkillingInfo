@@ -514,7 +514,7 @@ class CurrentView extends JPanel
 		long total = sessionManager.getClock().getTotalSeconds();
 		long active = sessionManager.getClock().getActiveSeconds();
 		long idle = sessionManager.getClock().getIdleSeconds();
-		int xp = session.getXpGained(session.getSkill());
+		int xp = session.getHeadlineXp();
 
 		totalTimeLabel.setText(formatDuration(total));
 		totalTimeLabel.setForeground(paused ? Palette.DIMMEST : Palette.TEXT);

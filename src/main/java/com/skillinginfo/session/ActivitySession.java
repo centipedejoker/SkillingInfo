@@ -257,10 +257,36 @@ public class ActivitySession
 		return activeSeconds > 0 ? kills / (double) activeSeconds * 3600 : 0;
 	}
 
+	/**
+	 * §14 `[v9]`: the XP figure the panel shows and rates off.
+	 * <p>
+	 * For a skilling session this is just the skill's own XP. For combat it
+	 * is the sum across every skill the session gained, because
+	 * {@code skill} there is the *group key* `SLAYER` (§7a) and a task pays
+	 * Attack, Strength, Hitpoints and Slayer together.
+	 * <p>
+	 * Reading the group key's own total made the panel disagree with itself:
+	 * the prompt sums every buffered drop, so it offered "+1,800 XP", you
+	 * pressed Start, and the XP tile read `+200` - same panel, same events,
+	 * nine times apart, with no change of label. `XP/HR`, the overall-rate
+	 * overflow line and the history aggregate all inherited it, so a session
+	 * genuinely running at 55k XP/hr displayed about 8k. That is §14's
+	 * original "displayed 15 for a 20,348 XP/hr session" arrived at by a
+	 * different route.
+	 */
+	public int getHeadlineXp()
+	{
+		if (!TrackingGroups.isCombatGroup(skill))
+		{
+			return getXpGained(skill);
+		}
+		return xpGained.values().stream().mapToInt(Integer::intValue).sum();
+	}
+
 	/** §14: XP per hour of *active* time. */
 	public double getXpPerHour()
 	{
-		return activeSeconds > 0 ? getXpGained(skill) / (double) activeSeconds * 3600 : 0;
+		return activeSeconds > 0 ? getHeadlineXp() / (double) activeSeconds * 3600 : 0;
 	}
 
 	public double getActionsPerHour()

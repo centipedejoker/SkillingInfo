@@ -101,6 +101,52 @@ public class SessionManagerSlayerTest
 	}
 
 	@Test
+	public void theXpHeadlineCoversEveryCombatSkill()
+	{
+		// The prompt sums every buffered drop; the session tile read only the
+		// group key's own XP. So the prompt offered "+1,800 XP", you pressed
+		// Start, and the tile read +200 - same panel, same events, nine times
+		// apart, no change of label. XP/HR and the history aggregate
+		// inherited it, so a task genuinely running at 55k XP/hr displayed
+		// about 8k.
+		SessionManager m = SessionManagerHarness.manager();
+		m.onInventoryChanged(SessionManagerHarness.items());
+		m.onEquipmentChanged(SessionManagerHarness.items());
+		m.onBankChanged(SessionManagerHarness.items());
+		m.onGameTick(0);
+
+		int atk = 0;
+		int slay = 0;
+		for (int t = 1; t <= 6; t += 2)
+		{
+			atk += 400;
+			slay += 100;
+			m.onStatChanged(Skill.ATTACK, atk);
+			m.onStatChanged(Skill.HITPOINTS, atk);
+			m.onStatChanged(Skill.SLAYER, slay);
+			m.onGameTick(t);
+		}
+		int promptTotal = m.getPendingPrompt().getTotalXp();
+		assertEquals(800 + 800 + 200, promptTotal);
+
+		m.start();
+		ActivitySession s = m.getCurrentSession();
+		assertEquals("what Start records is what the prompt offered",
+			promptTotal, s.getHeadlineXp());
+		assertEquals("and the per-skill split is still underneath",
+			200, s.getXpGained(Skill.SLAYER));
+	}
+
+	@Test
+	public void aSkillingHeadlineIsStillJustThatSkill()
+	{
+		ActivitySession s = new ActivitySession();
+		s.setSkill(Skill.WOODCUTTING);
+		s.addXp(Skill.WOODCUTTING, 1000);
+		assertEquals(1000, s.getHeadlineXp());
+	}
+
+	@Test
 	public void aGatheringSessionIgnoresTaskProgressEntirely()
 	{
 		// a task can tick down while the player is chopping - §7a keeps the
