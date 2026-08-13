@@ -5,7 +5,9 @@ import net.runelite.api.gameval.ItemID;
 import org.junit.Test;
 import static com.skillinginfo.session.SessionManagerHarness.entry;
 import static com.skillinginfo.session.SessionManagerHarness.items;
+import static com.skillinginfo.session.SessionManagerHarness.STARTED_TICK;
 import static com.skillinginfo.session.SessionManagerHarness.manager;
+import static com.skillinginfo.session.SessionManagerHarness.startedSession;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -209,6 +211,56 @@ public class SessionManagerLifecycleTest
 		}
 		assertEquals(SessionState.PROMPTED, m.getState());
 		assertEquals(Skill.HUNTER, m.getPendingPrompt().getSkill());
+	}
+
+	@Test
+	public void byproductXpIsCreditedToTheSessionItBelongsTo()
+	{
+		// An infernal axe pays Woodcutting and Firemaking for one chop. §9
+		// [v7] stopped that reading as a reward burst, and routed the
+		// byproduct away from detection so it couldn't start a Firemaking
+		// session of its own - but the path it was routed to only credits
+		// XP whose group key matches the session's, which a byproduct's
+		// never does. So it was dropped, while the comment beside the code
+		// said it was "still real and still credited to the session".
+		SessionManager m = startedSession(Skill.WOODCUTTING);
+		m.onStatChanged(Skill.FIREMAKING, 0); // login sync for the second skill
+		m.onGameTick(STARTED_TICK + 1);
+
+		m.onStatChanged(Skill.WOODCUTTING, 400);
+		m.onStatChanged(Skill.FIREMAKING, 50);
+		m.onGameTick(STARTED_TICK + 3);
+
+		ActivitySession s = m.getCurrentSession();
+		assertEquals(400, s.getXpGained(Skill.WOODCUTTING));
+		assertEquals("the byproduct is real XP and the session earned it",
+			50, s.getXpGained(Skill.FIREMAKING));
+		assertEquals("but it is still one chop, not two actions", 4, s.getActions());
+		assertEquals("and the headline stays the activity's own skill",
+			400, s.getHeadlineXp());
+	}
+
+	@Test
+	public void aByproductStillCannotStartOrDriveASession()
+	{
+		// the §9 [v7] behaviour the above must not undo
+		SessionManager m = seeded();
+		m.onStatChanged(Skill.WOODCUTTING, 0);
+		m.onStatChanged(Skill.FIREMAKING, 0);
+
+		int tick = 0;
+		for (int i = 1; i <= 3; i++)
+		{
+			tick += 2;
+			m.onStatChanged(Skill.WOODCUTTING, i * 100);
+			m.onStatChanged(Skill.FIREMAKING, i * 50);
+			m.onGameTick(tick);
+		}
+
+		assertEquals(Skill.WOODCUTTING, m.getPendingPrompt().getSkill());
+		assertEquals("the offer counts chops, not the firemaking that came free",
+			300, m.getPendingPrompt().getTotalXp());
+		assertEquals(3, m.getPendingPrompt().getDropCount());
 	}
 
 	@Test

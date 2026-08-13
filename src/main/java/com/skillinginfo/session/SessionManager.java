@@ -498,7 +498,11 @@ public class SessionManager
 			// session while you're chopping.
 			boolean isIncidentalByproduct = primaryGroupKey != null && groupKey != primaryGroupKey;
 
-			if (rewardBurstTick || isIncidentalByproduct)
+			if (isIncidentalByproduct)
+			{
+				creditByproduct(entry.getKey(), entry.getValue(), primaryGroupKey);
+			}
+			else if (rewardBurstTick)
 			{
 				creditActiveSessionOnly(entry.getKey(), entry.getValue());
 			}
@@ -586,12 +590,38 @@ public class SessionManager
 
 	private void creditActiveSessionOnly(Skill skill, int delta)
 	{
-		if ((state == SessionState.ACTIVE || (state == SessionState.PAUSED && !manuallyPaused))
-			&& currentSession != null && currentSession.getSkill() == TrackingGroups.groupKey(skill))
+		if (isRecording() && currentSession != null
+			&& currentSession.getSkill() == TrackingGroups.groupKey(skill))
 		{
 			currentSession.addXp(skill, delta);
 			lastQualifyingTick = currentTick;
 			lastXpCreditTick = currentTick;
+		}
+	}
+
+	/**
+	 * `[v9]` Credits XP a single action paid out incidentally - an infernal
+	 * axe's Firemaking, a bonecrusher's Prayer, a herbicide's Herblore.
+	 * <p>
+	 * Matched against the <em>primary</em> group key rather than the
+	 * byproduct's own, which is the whole point: a byproduct's group key
+	 * never equals the session's, by definition. Routing these through
+	 * {@link #creditActiveSessionOnly} therefore dropped every one of them
+	 * on the floor, while the comment beside the call said they were "still
+	 * real and still credited to the session".
+	 * <p>
+	 * No action is recorded: one chop is one action however many skills it
+	 * paid, which is the §9 `[v7]` reasoning that sent byproducts down a
+	 * separate path in the first place. The XP lands in {@code xpGained}
+	 * alongside the primary skill's, and §14's headline still reads the
+	 * activity's own skill - a Woodcutting session's rate is chopping XP per
+	 * hour, not chopping plus whatever the axe threw in.
+	 */
+	private void creditByproduct(Skill skill, int delta, Skill primaryGroupKey)
+	{
+		if (isRecording() && currentSession != null && currentSession.getSkill() == primaryGroupKey)
+		{
+			currentSession.addXp(skill, delta);
 		}
 	}
 

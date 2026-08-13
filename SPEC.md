@@ -338,6 +338,12 @@ Worth stating because it is easy to get wrong when adding entries: **the table i
 Only the two methods above are added, because they are the two that can be stated with confidence. Others in the same family — Guardians of the Rift, Camdozaal, herbiboar — plausibly qualify but have not been checked against the game, and guessing at this table is how the reward filter stops rejecting things it should. A test pins the behaviour §9 exists for: three unrelated skills at once is still a burst.
 
 Rejected: treating whichever group gained the most XP as primary. §9's burst rejection exists to stop reward interfaces starting sessions, and an XP-magnitude heuristic reopens exactly that.
+
+**`[v9]` Byproduct XP is now actually credited, which `[v7]` said it was and the code never did.** Having routed byproducts away from detection, `[v7]` sent them to a path that credits XP only when its tracking-group key matches the session's — and a byproduct's key never does, by definition. Every infernal-tool Firemaking drop, every bonecrusher Prayer drop and every herbicide Herblore drop was therefore discarded, while the comment beside the call said they were "still real and still credited to the session". Comment and code had disagreed since `[v7]`, and the comment was the one describing the intended behaviour.
+
+Byproducts are matched against the *primary* group key instead. Two things deliberately unchanged: no action is recorded (one chop is one action however many skills it paid — the reason byproducts got their own path in the first place), and §14's headline still reads the activity's own skill, so a Woodcutting session's rate is chopping XP per hour rather than chopping plus whatever the axe threw in. The byproduct sits in `xpGained` next to it, where §34 says derived and secondary figures belong.
+
+Accepted limitation, stated rather than discovered later: byproduct XP earned during the candidate and prompt windows is still lost, because §10's buffer feeds detection as well as the session and adding byproducts to it would let them count toward the confidence gate — the one thing `[v7]` exists to prevent. The primary skill's XP from that window is buffered and replayed as normal (§10 `[v9]`).
 ## 10. RETROACTIVE BUFFER
 
 Candidate mode temporarily records: timestamp, XP event, skill, optional activity signals, relevant direct output events.
