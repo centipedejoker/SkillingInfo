@@ -47,7 +47,13 @@ public final class TrackingGroups
 	{
 		BYPRODUCTS.put(Skill.WOODCUTTING, EnumSet.of(Skill.FIREMAKING));   // infernal axe
 		BYPRODUCTS.put(Skill.MINING, EnumSet.of(Skill.SMITHING));          // infernal pickaxe
-		BYPRODUCTS.put(Skill.FISHING, EnumSet.of(Skill.COOKING));          // infernal harpoon
+		// `[v9]` Fishing gains a third: barbarian fishing awards Fishing,
+		// Agility and Strength on one catch. Note SLAYER rather than
+		// STRENGTH - these are *group keys* (§7a), and every combat skill
+		// collapses to SLAYER, so naming the raw skill would never match.
+		BYPRODUCTS.put(Skill.FISHING, EnumSet.of(Skill.COOKING, Skill.AGILITY, Skill.SLAYER));
+		// `[v9]` birdhouse dismantling
+		BYPRODUCTS.put(Skill.HUNTER, EnumSet.of(Skill.CRAFTING));
 		// combat's group key is SLAYER (§7a); bonecrusher and herbicide
 		BYPRODUCTS.put(Skill.SLAYER, EnumSet.of(Skill.PRAYER, Skill.HERBLORE));
 	}

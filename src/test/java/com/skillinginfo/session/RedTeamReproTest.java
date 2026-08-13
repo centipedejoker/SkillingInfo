@@ -26,68 +26,6 @@ public class RedTeamReproTest
 	private static final int COINS = 995;
 
 	// =============================================================
-	// F10 - actions awarding three tracking groups never start
-	// =============================================================
-
-	/** Control: plain fishing does reach the prompt, so the driver is sound. */
-	@Test
-	public void plainFishingReachesPrompt()
-	{
-		SessionManager m = seeded();
-		int fx = 0;
-		for (int t = 1; t <= 16; t += 5)
-		{
-			fx += 100;
-			m.onStatChanged(Skill.FISHING, fx);
-			m.onGameTick(t);
-		}
-		assertEquals(SessionState.PROMPTED, m.getState());
-	}
-
-	/**
-	 * Barbarian fishing awards Fishing + Agility + Strength on the same tick.
-	 * groupKeys = {FISHING, AGILITY, SLAYER}; resolvePrimary returns null, so
-	 * every catch is treated as a §9 reward burst and no candidate opens.
-	 */
-	@Test
-	public void barbarianFishingNeverOffersASession()
-	{
-		SessionManager m = seeded();
-		int fx = 0;
-		int ax = 0;
-		int sx = 0;
-		for (int t = 1; t <= 200; t += 5)
-		{
-			fx += 100;
-			ax += 8;
-			sx += 8;
-			m.onStatChanged(Skill.FISHING, fx);
-			m.onStatChanged(Skill.AGILITY, ax);
-			m.onStatChanged(Skill.STRENGTH, sx);
-			m.onGameTick(t);
-		}
-		assertEquals("bug: never leaves IDLE", SessionState.IDLE, m.getState());
-	}
-
-	/** Same shape: birdhouse dismantling awards Hunter + Crafting in one tick. */
-	@Test
-	public void hunterPlusCraftingNeverOffersASession()
-	{
-		SessionManager m = seeded();
-		int hx = 0;
-		int cx = 0;
-		for (int t = 1; t <= 200; t += 5)
-		{
-			hx += 100;
-			cx += 30;
-			m.onStatChanged(Skill.HUNTER, hx);
-			m.onStatChanged(Skill.CRAFTING, cx);
-			m.onGameTick(t);
-		}
-		assertEquals("bug: never leaves IDLE", SessionState.IDLE, m.getState());
-	}
-
-	// =============================================================
 	// F11 - the combat XP headline is Slayer XP only
 	// =============================================================
 

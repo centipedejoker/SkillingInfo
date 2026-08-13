@@ -147,6 +147,86 @@ public class SessionManagerLifecycleTest
 		assertEquals("worth what was actually gained", 300, m.getPendingPrompt().getTotalXp());
 	}
 
+	// ------------------------------------------------------------------
+	// §9's reward-burst filter must not reject ordinary methods
+	// ------------------------------------------------------------------
+
+	/** Control: plain fishing reaches the prompt, so the driver below is sound. */
+	@Test
+	public void plainFishingReachesPrompt()
+	{
+		SessionManager m = seeded();
+		int fx = 0;
+		for (int t = 1; t <= 16; t += 5)
+		{
+			fx += 100;
+			m.onStatChanged(Skill.FISHING, fx);
+			m.onGameTick(t);
+		}
+		assertEquals(SessionState.PROMPTED, m.getState());
+	}
+
+	@Test
+	public void barbarianFishingReachesThePrompt()
+	{
+		// Fishing + Agility + Strength on one catch is three group keys, so
+		// resolvePrimary returned null and every catch read as a §9 reward
+		// burst - forever. A player could barbarian-fish for an hour and
+		// never leave "Nothing worth tracking yet", with no error and no log
+		// line. Same failure as the infernal axe in §9 [v7], one step out.
+		SessionManager m = seeded();
+		int fx = 0;
+		int ax = 0;
+		int sx = 0;
+		for (int t = 1; t <= 200; t += 5)
+		{
+			fx += 100;
+			ax += 8;
+			sx += 8;
+			m.onStatChanged(Skill.FISHING, fx);
+			m.onStatChanged(Skill.AGILITY, ax);
+			m.onStatChanged(Skill.STRENGTH, sx);
+			m.onGameTick(t);
+		}
+		assertEquals(SessionState.PROMPTED, m.getState());
+		assertEquals("and it's a fishing session, not an agility one",
+			Skill.FISHING, m.getPendingPrompt().getSkill());
+	}
+
+	@Test
+	public void birdhouseDismantlingReachesThePrompt()
+	{
+		SessionManager m = seeded();
+		int hx = 0;
+		int cx = 0;
+		for (int t = 1; t <= 200; t += 5)
+		{
+			hx += 100;
+			cx += 30;
+			m.onStatChanged(Skill.HUNTER, hx);
+			m.onStatChanged(Skill.CRAFTING, cx);
+			m.onGameTick(t);
+		}
+		assertEquals(SessionState.PROMPTED, m.getState());
+		assertEquals(Skill.HUNTER, m.getPendingPrompt().getSkill());
+	}
+
+	@Test
+	public void aGenuineRewardBurstIsStillRejected()
+	{
+		// the behaviour §9 exists for, which the entries above must not
+		// loosen: three unrelated skills at once is a reward interface
+		SessionManager m = seeded();
+		for (int t = 1; t <= 200; t += 5)
+		{
+			m.onStatChanged(Skill.MINING, t * 100);
+			m.onStatChanged(Skill.CRAFTING, t * 100);
+			m.onStatChanged(Skill.HERBLORE, t * 100);
+			m.onGameTick(t);
+		}
+		assertEquals(SessionState.IDLE, m.getState());
+	}
+
 	@Test
 	public void aPromptForOneGroupStillBlocksAnother()
 	{

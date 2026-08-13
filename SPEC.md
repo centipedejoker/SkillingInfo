@@ -327,6 +327,13 @@ When a tick's group keys are one primary plus only its own byproducts, it is tre
 
 The consumed item itself is deliberately not tracked — a log burned instantly by an infernal axe was never retained, so §17's ledger is correct to omit it. `XpTrackerService`'s action count (§14) still reflects the true number of chops regardless.
 
+**`[v9]` The byproduct table needed entries beyond two groups, and its keys are group keys.** `resolvePrimary` accepts one primary plus its own declared byproducts, and the table only ever described pairs — so any method awarding *three* tracking groups fell straight through to the burst rejection. Barbarian fishing (Fishing + Agility + Strength) produced `{FISHING, AGILITY, SLAYER}` on every catch and could never open a candidate at all: an hour of it leaves the panel reading "Nothing worth tracking yet", with no error and no log line. Birdhouse dismantling (Hunter + Crafting) failed the same way. This is the infernal-axe defect `[v7]` fixed, one step further out.
+
+Worth stating because it is easy to get wrong when adding entries: **the table is keyed by tracking-group key, not by raw skill.** Strength's group key is `SLAYER` (§7a), so an entry naming `STRENGTH` would never match anything. Barbarian fishing's entry therefore reads `FISHING → {COOKING, AGILITY, SLAYER}`.
+
+Only the two methods above are added, because they are the two that can be stated with confidence. Others in the same family — Guardians of the Rift, Camdozaal, herbiboar — plausibly qualify but have not been checked against the game, and guessing at this table is how the reward filter stops rejecting things it should. A test pins the behaviour §9 exists for: three unrelated skills at once is still a burst.
+
+Rejected: treating whichever group gained the most XP as primary. §9's burst rejection exists to stop reward interfaces starting sessions, and an XP-magnitude heuristic reopens exactly that.
 ## 10. RETROACTIVE BUFFER
 
 Candidate mode temporarily records: timestamp, XP event, skill, optional activity signals, relevant direct output events.
