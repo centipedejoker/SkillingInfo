@@ -10,8 +10,10 @@ that already cost real time once.
 ## 1. Where it stands
 
 A working RuneLite plugin: 33 source files, 110 passing tests, 64 commits.
-Every phase in `SPEC.md` §61 is built, and everything except parts of Phase 5
-has been validated in live gameplay by the owner.
+Every phase in `SPEC.md` §61 is built. Everything except parts of Phase 5 was
+validated in live gameplay by the owner — but the v9 review then changed
+behaviour in several of those validated paths, so §1a lists what needs
+re-playing before submission.
 
 | Phase | State |
 |---|---|
@@ -19,15 +21,17 @@ has been validated in live gameplay by the owner.
 | 2 — item flow, drops, retention | Done, validated |
 | 3 — ground pickup, repickup | Done, validated |
 | 4 — bank correlation, future XP | Done, validated |
-| 5 — activity classification | Woodcutting + Fishing validated; Mining, Hunter, Farming, Cooking, Smithing, Runecraft built but not yet played |
+| 5 — activity classification | Woodcutting + Fishing validated; Mining, Hunter, Farming, Cooking, Smithing, Runecraft built but not yet played (§1a) |
 | 6 — Slayer, KPH, loot flow, trips | Done, validated. **Task loadouts (§38) deliberately skipped** |
 | 7 — UI design pass | Done, validated |
 
-**Blocking release** (both need the owner, not code):
+**Blocking release** (all three need the owner, not code):
 1. `icon.png` (≤48×72px listing thumbnail) and a real `NavigationButton`
    icon. The sidebar icon is still an "SI" circle drawn in code in
    `SkillingInfoPlugin.buildIcon()`.
 2. §59's three screenshots.
+3. The playtest in §1a. The v9 review changed behaviour in paths that had
+   been validated in play, and one of them tightened rather than loosened.
 
 Then submission is a PR to `runelite/plugin-hub` adding one file with the
 repo URL and a commit hash.
@@ -36,6 +40,77 @@ repo URL and a commit hash.
 task loadouts (§38); `ITEM_TRANSFORMED`, which turned out unnecessary once
 consumption existed (§18); trip *aggregation* (the boundaries are recorded,
 nothing consumes them yet); Fletching/Herblore/Crafting product tables.
+
+---
+
+## 1a. What still needs playing
+
+The v9 review fixed fifteen defects, thirteen of them reproduced with tests
+first. Tests are why the fixes are believed; **they are not why the fixes
+are trusted** — §2's loop still applies, and roughly half this project's
+real bugs were invisible to both the compiler and the tests. Everything
+below is a change that a test can confirm the *logic* of but not the
+*premise*, because the premise is what RuneLite actually does in a live
+client.
+
+Run with `./gradlew run` (it already passes `--debug`) and watch the log
+lines listed in §2. Ordered by what would cost most to discover after
+submission.
+
+**1. Ground pickups on a Slayer trip — the one to do first.** §20a used to
+confirm a pickup from the "Take" click alone; it now requires the item to
+have actually left the ground. That tightens a path you had already
+validated in play, so the failure direction has *flipped*: it can no longer
+steal output it shouldn't, but it can now miss pickups it should have. For
+combat that is severe and quiet — loot never counts as acquired, so account
+gain undercounts and the retention block reads low or vanishes.
+*Right:* `Crediting pickup` for each loot pile you take.
+*Wrong:* you loot, the item is in your inventory, and no `Crediting pickup`
+appears. If that happens the evidence window in `GroundItemTracker` is the
+first thing to widen.
+
+**2. Anything with a container that isn't the bank.** Looting bag, seed box,
+seed vault, group storage. Their `gameval` ids are verified but whether each
+fires `ItemContainerChanged` *promptly* — rather than only when you open the
+container — is not, and could not be established without the game.
+*Right:* stow something and nothing at all is recorded for it.
+*Wrong:* `Crediting other loss` when you put an item in a looting bag. That
+is a degraded outcome rather than a wrong one (the loss bucket never touches
+account gain), so it's worth knowing but not urgent.
+
+**3. Coal bag, herb sack, gem sack — the case that motivated §18 `[v9]`.**
+A Mining trip with a coal bag used to report `RETAINED 0.0% — 0 kept, 27
+lost` for a trip that banked every coal.
+*Right:* retention reads ~100%, and `Crediting other loss` appears for each
+stow.
+*Wrong:* `Crediting consumed` for coal, or retention near zero.
+
+**4. The bank-adjacent skills, which have still never been played.** Mining,
+Hunter, Farming, Cooking, Smithing and Runecraft are all implemented and
+none has been in a real session — and they are exactly where the withdrawal
+fixes bite, because a withdrawal landing within two ticks of an XP drop is a
+bank-adjacent phenomenon. Withdraw normally *and* as notes.
+*Wrong:* `Crediting generated` for anything you withdrew.
+
+**5. Dying on a task.** Not worth arranging deliberately, but note what
+happens when it does.
+*Wrong:* the item ledger showing `Consumed` for your whole inventory.
+
+**6. The quick confirmations.** Each of these is a visible yes/no and takes
+seconds:
+- Barbarian fishing and a birdhouse run should now *offer a session at all* —
+  neither could before.
+- The prompt's XP figure should climb while the offer is up, and the number
+  on the session tile should match what the prompt last showed.
+- A combat session's `XP` tile should read the whole task's XP, not the
+  Slayer eighth of it.
+- Pause manually, keep playing, and nothing should be recorded; the band
+  should read `until you resume` rather than `not counted`.
+- Log out of an alt and into a main: no phantom session should be offered.
+- With an infernal tool, the session's per-skill split should show the
+  byproduct skill's XP.
+- Turn the Loot Tracker off and start a combat session: the panel should say
+  so rather than silently recording nothing.
 
 ---
 
@@ -57,9 +132,12 @@ it works.
 
 **When something doesn't work, get the log before theorising.** The debug
 logging in `SessionManager` is deliberately left in — `Candidate tick`,
-`Crediting generated`, `Crediting banked`, `Crediting pickup`,
-`Inventory delta`. Every time we guessed instead of reading it, the guess
-was wrong; every time we read it, the cause was obvious.
+`Candidate opened`, `PROMPTED`, `Inventory delta`, and one line per
+attribution: `Crediting generated`, `Crediting banked`, `Crediting pickup`,
+`Crediting consumed`, `Crediting other loss`. Between them they say which
+branch of the claim chain (§18) took each movement, which is usually the
+whole answer. Every time we guessed instead of reading it, the guess was
+wrong; every time we read it, the cause was obvious.
 
 ---
 
