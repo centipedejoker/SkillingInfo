@@ -119,10 +119,8 @@ class CurrentView extends JPanel
 	private final JLabel killsValue = Ui.bold("", Palette.TEXT);
 	private final JLabel kphValue = Ui.bold("", Palette.TEXT);
 	private final JPanel killsRow;
-	private final JLabel slayerHintLabel = Ui.label(
-		"<html><body style='width:190px'>Enable RuneLite Slayer plugin to see KPH</body></html>",
-		FontManager.getRunescapeSmallFont(), Palette.DIM);
-	private final JPanel slayerHintBox = new JPanel(new BorderLayout());
+	private final JLabel dependencyHintLabel = Ui.label("", FontManager.getRunescapeSmallFont(), Palette.DIM);
+	private final JPanel dependencyHintBox = new JPanel(new BorderLayout());
 	private final JLabel overflowLine = Ui.label("", FontManager.getRunescapeSmallFont(), Palette.DIMMEST);
 
 	private final JPanel projectionPanel = new JPanel();
@@ -393,11 +391,11 @@ class CurrentView extends JPanel
 		// sits in the slot the actions tiles vacate for combat, styled as a
 		// tile so the row reads as "this is where a stat would be" rather
 		// than as loose text after the block
-		slayerHintBox.setBackground(Palette.TILE);
-		slayerHintBox.setBorder(BorderFactory.createEmptyBorder(4, 5, 4, 5));
-		slayerHintBox.add(slayerHintLabel, BorderLayout.CENTER);
-		slayerHintBox.setVisible(false);
-		p.add(Ui.fixHeight(slayerHintBox));
+		dependencyHintBox.setBackground(Palette.TILE);
+		dependencyHintBox.setBorder(BorderFactory.createEmptyBorder(4, 5, 4, 5));
+		dependencyHintBox.add(dependencyHintLabel, BorderLayout.CENTER);
+		dependencyHintBox.setVisible(false);
+		p.add(Ui.fixHeight(dependencyHintBox));
 
 		p.add(Ui.gap(3));
 		p.add(killsRow);
@@ -584,11 +582,26 @@ class CurrentView extends JPanel
 			actionsHrValue.setForeground(primary);
 		}
 
-		// A combat session with no task in sight means RuneLite's own Slayer
-		// plugin is switched off - it's a declared dependency, but that only
-		// makes it injectable, not enabled. Say so, rather than leaving kills
-		// sitting at zero with no explanation.
-		slayerHintBox.setVisible(combat && !sessionManager.isSlayerTaskVisible());
+		// A combat session depends on two of RuneLite's own plugins being
+		// switched on. Declaring them dependencies only makes them
+		// injectable, not enabled. Say which one is missing, rather than
+		// leaving kills at zero and the retention block absent with no
+		// explanation - §37 [v9]: with the Loot Tracker off, nothing at all
+		// is recorded for combat loot and the panel simply shows less.
+		String missing = null;
+		if (combat && !sessionManager.isLootTrackingVisible())
+		{
+			missing = "Enable RuneLite Loot Tracker plugin to record loot";
+		}
+		else if (combat && !sessionManager.isSlayerTaskVisible())
+		{
+			missing = "Enable RuneLite Slayer plugin to see KPH";
+		}
+		dependencyHintBox.setVisible(missing != null);
+		if (missing != null)
+		{
+			dependencyHintLabel.setText("<html><body style='width:190px'>" + missing + "</body></html>");
+		}
 
 		int kills = session.getKills();
 		killsRow.setVisible(kills > 0);

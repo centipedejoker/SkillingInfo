@@ -49,8 +49,10 @@ import net.runelite.client.game.ItemStack;
 import net.runelite.client.game.SkillIconManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDependency;
+import net.runelite.client.plugins.PluginManager;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.loottracker.LootReceived;
+import net.runelite.client.plugins.loottracker.LootTrackerPlugin;
 import net.runelite.client.plugins.slayer.SlayerPlugin;
 import net.runelite.client.plugins.slayer.SlayerPluginService;
 import net.runelite.client.ui.ClientToolbar;
@@ -64,9 +66,19 @@ import net.runelite.client.ui.NavigationButton;
 )
 // §5/§37: Slayer task state comes from RuneLite's own Slayer plugin rather
 // than being re-derived from chat messages, so it's declared as a
-// dependency. Loot arrives via the core Loot Tracker's LootReceived event,
-// which needs no declaration.
+// dependency.
+//
+// §37 [v9]: so is the Loot Tracker. LootReceived is posted by that *plugin*
+// and not by the client - disassembling every class in the client jar finds
+// exactly one construction of it, in LootTrackerPlugin.addLoot. A comment
+// here used to claim the opposite.
+//
+// Declaring both is necessary but not sufficient: PluginManager.startPlugin
+// only force-stops conflicting plugins, it never force-starts dependencies.
+// Enabling this plugin does not enable those, which is why their state is
+// also surfaced to the panel.
 @PluginDependency(SlayerPlugin.class)
+@PluginDependency(LootTrackerPlugin.class)
 public class SkillingInfoPlugin extends Plugin
 {
 	/**
@@ -106,6 +118,9 @@ public class SkillingInfoPlugin extends Plugin
 
 	@Inject
 	private ConfigManager configManager;
+
+	@Inject
+	private PluginManager pluginManager;
 
 	// §44 [v9]: history reads and writes run here, not on the client thread
 	@Inject
@@ -204,6 +219,7 @@ public class SkillingInfoPlugin extends Plugin
 			slayerPluginService.getTask(),
 			slayerPluginService.getTaskLocation(),
 			slayerPluginService.getRemainingAmount());
+		sessionManager.setLootTrackingVisible(isLootTrackerRunning());
 		resolveItemNames();
 		SwingUtilities.invokeLater(this::refreshPanel);
 	}
@@ -365,6 +381,23 @@ public class SkillingInfoPlugin extends Plugin
 	 * §18 `[v9]`: dying empties the inventory for reasons unrelated to the
 	 * activity, and combat holds the consumption window permanently open.
 	 */
+	/**
+	 * §37 `[v9]`: whether the Loot Tracker is switched on. Declaring it a
+	 * dependency makes it injectable, not enabled - and with it off, combat
+	 * loot silently never arrives.
+	 */
+	private boolean isLootTrackerRunning()
+	{
+		for (Plugin plugin : pluginManager.getPlugins())
+		{
+			if (plugin instanceof LootTrackerPlugin)
+			{
+				return pluginManager.isPluginEnabled(plugin);
+			}
+		}
+		return false;
+	}
+
 	@Subscribe
 	public void onActorDeath(ActorDeath event)
 	{

@@ -903,6 +903,14 @@ Initial loadout
 
 `[v4]` This model only exists at all because a Slayer task is active — §1a scopes combat sessions to Slayer-task combat, mechanically enforced by §7a's Slayer-XP-presence gate. Plain bossing without a task never reaches this screen.
 
+**`[v9]` `LootReceived` comes from the Loot Tracker *plugin*, not from the client, and the source said otherwise.** Disassembling every class in the client jar finds exactly one construction of that event, in `LootTrackerPlugin.addLoot`. A comment in this codebase asserted it "arrives via the core Loot Tracker's `LootReceived` event, which needs no declaration" — wrong on both counts, and the kind of claim §3 of the handover exists to stop.
+
+With the Loot Tracker switched off, a combat session records `generated = 0`, so `getRetentionRate()` returns −1 and the panel *hides the retention block altogether*. The plugin's headline claim for combat silently ceases to exist, with no zero to notice and nothing to explain it. The Slayer-plugin-off case had an explanation on screen; this had nothing.
+
+`@PluginDependency` is necessary but not sufficient, and it is worth being precise about why: `PluginManager.startPlugin` only force-stops *conflicting* plugins — it never force-starts dependencies. Enabling Skilling Info does not enable the Slayer plugin or the Loot Tracker. So both are declared *and* their running state is surfaced, sharing one hint slot in the panel.
+
+Rejected: switching to core's `NpcLootReceived`, which always fires. It would work, but §5 deliberately reuses the Loot Tracker's aggregation rather than re-deriving loot from raw events, and that is a larger decision than this defect justifies.
+
 **`[v8]` Kills count while PAUSED, and resume the session.** Kill counting was the one signal that only ran while ACTIVE — every other piece of activity evidence (loot, pickups, drops, banking) already counted in both states and resumed the session via §13 `[v4]`'s broadened idle signal. Worse, the paused path *advanced the baseline* past the kill instead of leaving it pending, so the count was lost outright rather than deferred — while loot from the very same kill was credited and did resume the session. A kill is the strongest possible evidence that a combat session is in progress, so it now behaves like the rest.
 
 The general form is worth stating, because §13 `[v4]` only half-landed the first time: **whenever a signal is gated on session state, the branch that declines to record it must not also consume the evidence.** Discarding and advancing look identical while a session is running and diverge completely the moment it isn't.

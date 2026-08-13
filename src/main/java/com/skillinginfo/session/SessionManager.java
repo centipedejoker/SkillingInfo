@@ -143,6 +143,24 @@ public class SessionManager
 	private boolean slayerTaskVisible;
 
 	/**
+	 * `[v9]` Whether RuneLite's Loot Tracker is actually running.
+	 * <p>
+	 * The same trap as {@link #slayerTaskVisible}, and worse for being
+	 * invisible: `LootReceived` is posted by the Loot Tracker *plugin*, not by
+	 * the client, so with it switched off a combat session records
+	 * `generated = 0` and the retention block - the plugin's headline claim
+	 * for combat - hides itself entirely rather than reading zero. A comment
+	 * in the source asserted the opposite, that the event came from core.
+	 */
+	@Getter
+	private boolean lootTrackingVisible;
+
+	public void setLootTrackingVisible(boolean visible)
+	{
+		this.lootTrackingVisible = visible;
+	}
+
+	/**
 	 * `[v9]` itemId → the id this one is a *note of*, or -1 when it isn't a
 	 * note. Supplied as a function rather than resolved here because the
 	 * answer comes from {@code ItemManager}, which asserts the client thread -
