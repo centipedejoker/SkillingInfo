@@ -9,7 +9,7 @@ that already cost real time once.
 
 ## 1. Where it stands
 
-A working RuneLite plugin: 32 source files, 85 passing tests, 47 commits.
+A working RuneLite plugin: 33 source files, 108 passing tests, 63 commits.
 Every phase in `SPEC.md` §61 is built, and everything except parts of Phase 5
 has been validated in live gameplay by the owner.
 
@@ -135,6 +135,19 @@ lost rather than deferred, silently and cumulatively. Discarding and
 advancing look identical while a session is running and diverge completely
 the moment it isn't. Kills now count while PAUSED and resume the session,
 like every other piece of activity evidence (§13 `[v4]`, §37 `[v8]`).
+
+**Two containers, one movement — and both directions of both.** Nearly
+every accounting bug found so far is the same shape: a fix applied to one
+direction of a transfer and not the other. Wield was handled and unequip
+wasn't; bank deposits were capped and withdrawals weren't; unnoted ids
+matched and noted ones didn't. When you touch the claim chain, write down
+which direction of which container you just changed, and then do the other
+one (§18 `[v9]`).
+
+**`LOGGED_IN` is not a login.** It fires on every region change - teleports,
+dungeons, boats, hops. RuneLite core says so in a comment in the same
+handler. Anything expensive or stateful behind it needs an account-hash
+guard, or you get a full history re-parse on every staircase (§5 `[v9]`).
 
 **Test this layer by driving ticks, not by calling the model.** Every test
 before v8 poked `ActivitySession` directly, and the bugs above all needed
