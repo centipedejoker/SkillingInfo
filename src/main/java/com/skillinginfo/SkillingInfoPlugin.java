@@ -30,6 +30,7 @@ import net.runelite.api.MenuAction;
 import net.runelite.api.TileItem;
 import net.runelite.api.WorldType;
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.events.ActorDeath;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.ItemContainerChanged;
@@ -358,6 +359,19 @@ public class SkillingInfoPlugin extends Plugin
 			items.merge(stack.getId(), stack.getQuantity(), Integer::sum);
 		}
 		sessionManager.onNpcLootReceived(items);
+	}
+
+	/**
+	 * §18 `[v9]`: dying empties the inventory for reasons unrelated to the
+	 * activity, and combat holds the consumption window permanently open.
+	 */
+	@Subscribe
+	public void onActorDeath(ActorDeath event)
+	{
+		if (event.getActor() == client.getLocalPlayer())
+		{
+			sessionManager.onLocalPlayerDeath();
+		}
 	}
 
 	@Subscribe

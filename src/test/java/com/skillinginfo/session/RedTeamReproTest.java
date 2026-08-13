@@ -88,27 +88,6 @@ public class RedTeamReproTest
 	}
 
 	// =============================================================
-	// F8 - death during a combat session
-	// =============================================================
-
-	/**
-	 * The generation catch-all is disabled for combat; the consumption
-	 * catch-all is not, and combat refreshes lastXpCreditTick every hit.
-	 */
-	@Test
-	public void deathDuringSlayerBooksWholeInventoryAsConsumed()
-	{
-		SessionManager m = startedSession(Skill.SLAYER,
-			items(RAW_SHARK, 20, COINS, 500_000), items(), items());
-		m.onInventoryChanged(items()); // died
-		m.onGameTick(SessionManagerHarness.STARTED_TICK + 1);
-
-		assertEquals("bug", 20, entry(m, RAW_SHARK).getConsumed());
-		assertEquals("bug", 500_000, entry(m, COINS).getConsumed());
-		assertEquals("bug", 500_020, m.getCurrentSession().getTotalConsumed());
-	}
-
-	// =============================================================
 	// F11 - the combat XP headline is Slayer XP only
 	// =============================================================
 

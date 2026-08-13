@@ -513,6 +513,10 @@ It is deliberately a short list of skills with **no** inputs rather than a long 
 
 Accepted limitations, stated rather than buried: a fish barrel during a Fishing session, and a herb sack during a Slayer task, still read as consumption, because those activities genuinely do consume things and nothing distinguishes the two cases from outside. Both undercount retention — which is the right side to fail on, now that the claim is being made about an ambiguous case rather than an unambiguous one.
 
+**`[v9]` Dying is not the activity consuming your inventory.** The generation catch-all is correctly disabled for combat, and the consumption one was not — and because combat refreshes the XP-credit tick on every hit, the consumption window is *permanently open* for the whole of a Slayer task. Dying carrying 500k coins recorded `Consumed −500,000`, and permanently: gravestone retrieval is never re-credited, since there is no Take click and generation is off for combat.
+
+Two signals, because neither covers the other. `ActorDeath` for the local player is the accurate one and handles a death where items were protected. The backstop is a plausibility rule for a total loss with no death event: several distinct stacks gone at once *and* nothing left behind. Both halves of that condition are needed — eating your last shark also empties an inventory, and that really is consumption.
+
 **`[v8]` Container transfers are claimed in both directions, for both containers.** The v7 rule above was written from the decrease side only, and the increase side had no equivalent. Three defects followed from that asymmetry, all found by driving `SessionManager` through real tick sequences rather than by reading it:
 
 - **Unequipping was booked as skilling output.** The wield case (inventory decrease matched by an equipment increase) was handled; the mirror was not, so taking a glory off mid-chop was an unexplained inventory increase inside the XP window and §16's catch-all credited it as a log.

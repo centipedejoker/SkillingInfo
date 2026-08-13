@@ -127,6 +127,11 @@ public class SessionManager
 	// the same trap that made XP Tracker's rates unusable (§14).
 	private int lastRemainingAmount = -1;
 
+	// §18 [v9]: how long after a death the catch-alls stay suppressed. The
+	// inventory doesn't clear in the same tick the death animation starts.
+	private static final int DEATH_SUPPRESSION_TICKS = 5;
+	private int deathSuppressedUntilTick = Integer.MIN_VALUE / 2;
+
 	/**
 	 * Whether RuneLite's Slayer plugin is actually reporting a task. It is a
 	 * declared dependency, but that only guarantees it is loaded and
@@ -310,6 +315,18 @@ public class SessionManager
 			currentSession.addGeneratedOnly(entry.getKey(), entry.getValue());
 		}
 		recordNonXpActivity();
+	}
+
+	/**
+	 * §18 `[v9]`: the local player died, so the inventory is about to empty
+	 * for a reason that has nothing to do with the activity. Suppresses the
+	 * catch-alls for a few ticks - the inventory clears a tick or two after
+	 * the death animation begins, not in the same one.
+	 */
+	public void onLocalPlayerDeath()
+	{
+		log.debug("Local player died at tick {}", currentTick);
+		deathSuppressedUntilTick = currentTick + DEATH_SUPPRESSION_TICKS;
 	}
 
 	/** SPEC.md §18 [v7]: needed only to tell a wield apart from a consumption. */
@@ -807,6 +824,33 @@ public class SessionManager
 	 * undercounts retention rather than inventing gain, which is the side
 	 * §27 says to err on.
 	 */
+	/**
+	 * `[v9]` Whether a tick's unexplained decrease is too big to be an
+	 * activity using something up.
+	 * <p>
+	 * The motivating case is dying. Combat refreshes {@code lastXpCreditTick}
+	 * on every hit, so the consumption window is permanently open during a
+	 * task - and the generation catch-all is correctly disabled for combat
+	 * while this one was not. Die carrying 500k coins and the ledger read
+	 * `Consumed -500,000`, permanently: gravestone retrieval is never
+	 * re-credited, because there is no Take click and generation is off.
+	 * <p>
+	 * Two signals, because neither covers the other. {@link
+	 * #onLocalPlayerDeath()} is the accurate one and handles a death where
+	 * items were kept. This is the backstop for a total loss with no death
+	 * event: several distinct stacks gone at once and nothing left behind.
+	 * Both conditions are needed - eating your last shark also empties an
+	 * inventory, and that really is consumption.
+	 */
+	private boolean isBulkLoss(Map<Integer, Integer> decreased)
+	{
+		if (currentTick <= deathSuppressedUntilTick)
+		{
+			return true;
+		}
+		return decreased.size() >= 2 && inventoryDeltaTracker.isEmpty();
+	}
+
 	private void creditConsumption(Map<Integer, Integer> decreased)
 	{
 		if (currentTick - lastXpCreditTick > GENERATION_WINDOW_TICKS)
@@ -818,7 +862,8 @@ public class SessionManager
 		// so whatever left is an unexplained loss (§50) - a coal bag, a gem
 		// sack, a deposit box. Recorded rather than discarded, but never
 		// netted off: the coal is in the bag, not destroyed.
-		boolean canConsume = !TrackingGroups.consumesNothing(currentSession.getSkill());
+		boolean canConsume = !TrackingGroups.consumesNothing(currentSession.getSkill())
+			&& !isBulkLoss(decreased);
 
 		for (Map.Entry<Integer, Integer> entry : decreased.entrySet())
 		{

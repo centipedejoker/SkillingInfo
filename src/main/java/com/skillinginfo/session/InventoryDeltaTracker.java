@@ -79,6 +79,15 @@ public class InventoryDeltaTracker
 		lastSnapshot.putAll(current);
 	}
 
+	/**
+	 * `[v9]` Whether the container is empty as of the last snapshot. Used to
+	 * tell a bulk loss from a consumption (§18 `[v9]`).
+	 */
+	public boolean isEmpty()
+	{
+		return lastSnapshot.isEmpty();
+	}
+
 	public Map<Integer, Integer> consumeIncreased()
 	{
 		Map<Integer, Integer> result = new HashMap<>(increased);

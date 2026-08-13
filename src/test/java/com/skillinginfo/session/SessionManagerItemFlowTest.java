@@ -38,6 +38,7 @@ public class SessionManagerItemFlowTest
 	private static final int RAW_SHARK_NOTED = 384;
 	private static final int COAL = ItemID.COAL;
 	private static final int LOOTING_BAG = InventoryID.LOOTING_BAG;
+	private static final int COINS = ItemID.COINS;
 
 	private static int generated(SessionManager m, int itemId)
 	{
@@ -250,6 +251,56 @@ public class SessionManagerItemFlowTest
 
 		assertEquals(0, consumed(m, LOGS));
 		assertNull("a claimed transfer is explained outright, not bucketed", entry(m, LOGS));
+	}
+
+	@Test
+	public void dyingIsNotTheActivityConsumingYourInventory()
+	{
+		// The generation catch-all is correctly disabled for combat; the
+		// consumption one was not, and combat refreshes lastXpCreditTick on
+		// every hit, so the window is permanently open during a task. Dying
+		// carrying 500k coins recorded `Consumed -500,000` - permanently,
+		// because gravestone retrieval is never re-credited: there is no Take
+		// click, and generation is off for combat.
+		SessionManager m = startedSession(Skill.SLAYER,
+			items(RAW_SHARK, 20, COINS, 500_000), items(), items());
+
+		m.onInventoryChanged(items()); // died
+		m.onGameTick(STARTED_TICK + 1);
+
+		assertEquals("a Slayer task does not eat 500k coins",
+			0, m.getCurrentSession().getTotalConsumed());
+		assertEquals(20, entry(m, RAW_SHARK).getOtherLoss());
+		assertEquals(500_000, entry(m, COINS).getOtherLoss());
+	}
+
+	@Test
+	public void aDeathEventSuppressesTheCatchAllsEvenWhenItemsAreKept()
+	{
+		// The bulk-loss heuristic needs the inventory to end up empty, so it
+		// misses a death where items were protected. ActorDeath doesn't.
+		SessionManager m = startedSession(Skill.SLAYER,
+			items(RAW_SHARK, 20, COINS, 500_000), items(), items());
+
+		m.onLocalPlayerDeath();
+		m.onInventoryChanged(items(COINS, 500_000)); // coins protected
+		m.onGameTick(STARTED_TICK + 1);
+
+		assertEquals(0, m.getCurrentSession().getTotalConsumed());
+		assertEquals(20, entry(m, RAW_SHARK).getOtherLoss());
+	}
+
+	@Test
+	public void eatingYourLastSharkIsStillConsumption()
+	{
+		// the control the bulk-loss rule must not swallow: one stack, and an
+		// inventory that happens to end up empty
+		SessionManager m = startedSession(Skill.SLAYER, items(RAW_SHARK, 1), items(), items());
+
+		m.onInventoryChanged(items());
+		m.onGameTick(STARTED_TICK + 1);
+
+		assertEquals(1, consumed(m, RAW_SHARK));
 	}
 
 	// ------------------------------------------------------------------
