@@ -147,14 +147,15 @@ public class SkillingInfoPlugin extends Plugin
 	protected void startUp()
 	{
 		itemUseStore = new ItemUseStore(configManager);
-		sessionRepository = new SessionRepository();
+		sessionRepository = new SessionRepository(executor);
 		sessionManager = new SessionManager(config, sessionRepository, itemUseStore, this::unnotedId);
 		// startUp runs on the EDT (PluginManager.startPlugin asserts it), so
 		// the initial load goes to the executor like every other read
 		reloadHistory(0);
 
 		BufferedImage icon = buildIcon();
-		panel = new SkillingInfoPanel(sessionManager, skillIconManager, itemUseStore, itemNames, itemManager, icon);
+		panel = new SkillingInfoPanel(sessionManager, skillIconManager, itemUseStore, itemNames, itemManager, icon,
+			clientThread::invoke);
 		panel.refresh();
 
 		navButton = NavigationButton.builder()
@@ -175,7 +176,9 @@ public class SkillingInfoPlugin extends Plugin
 		// way out, and shutdown has exactly the same obligation.
 		if (sessionManager != null)
 		{
-			sessionManager.stop();
+			// §48a [v9]: shutDown runs on the EDT, and stop() both mutates
+			// session state and writes the record out
+			clientThread.invoke(sessionManager::stop);
 		}
 
 		clientToolbar.removeNavigation(navButton);

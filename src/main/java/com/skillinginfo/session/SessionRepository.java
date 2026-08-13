@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.Executor;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.RuneLite;
 
@@ -40,6 +41,24 @@ public class SessionRepository
 		.create();
 
 	private volatile File file;
+
+	/**
+	 * `[v9]` Where the actual write happens. Defaults to the calling thread,
+	 * which is what tests want; the plugin passes RuneLite's executor so a
+	 * session being finalised doesn't put file I/O on the client thread
+	 * (§48a).
+	 */
+	private final Executor writeExecutor;
+
+	public SessionRepository()
+	{
+		this(Runnable::run);
+	}
+
+	public SessionRepository(Executor writeExecutor)
+	{
+		this.writeExecutor = writeExecutor;
+	}
 
 	/**
 	 * `[v9]` Points the repository at an account's file.
@@ -71,16 +90,28 @@ public class SessionRepository
 
 	public void append(ActivitySession session)
 	{
-		File file = resolveFile();
-		try (Writer writer = new FileWriter(file, StandardCharsets.UTF_8, true))
-		{
-			writer.write(GSON.toJson(session));
-			writer.write(System.lineSeparator());
-		}
-		catch (IOException e)
-		{
-			log.warn("Failed to persist session {}", session.getId(), e);
-		}
+		// Serialised here, written elsewhere: the session is finalised by the
+		// time this is called, and turning it into a string on the caller's
+		// thread means the writer can't observe it mid-anything.
+		//
+		// `[v9]` The line terminator is part of the same write rather than a
+		// second call. A crash between the two left a truncated line that the
+		// *next* append concatenated onto, so one bad record took a good one
+		// with it - loadAll's per-line recovery can only skip whole lines.
+		String line = GSON.toJson(session) + System.lineSeparator();
+		String id = session.getId();
+		File target = resolveFile();
+
+		writeExecutor.execute(() -> {
+			try (Writer writer = new FileWriter(target, StandardCharsets.UTF_8, true))
+			{
+				writer.write(line);
+			}
+			catch (IOException e)
+			{
+				log.warn("Failed to persist session {}", id, e);
+			}
+		});
 	}
 
 	/**

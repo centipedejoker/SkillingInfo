@@ -21,6 +21,7 @@ import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.Set;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -64,6 +65,20 @@ class CurrentView extends JPanel
 	private final ItemManager itemManager;
 	private final SkillIconManager skillIconManager;
 	private final Runnable onAction;
+
+	/**
+	 * §48a `[v9]`: every button here fires on the EDT, and session state
+	 * belongs to the client thread. Nothing in {@code session/} is
+	 * synchronised and nothing should be, so mutations hop instead.
+	 * <p>
+	 * The bug this closes isn't a torn read. {@code onGameTick} samples
+	 * {@code state} at its switch and acts on it several statements later, so
+	 * a {@code start()} landing in that gap left the session ACTIVE with the
+	 * state machine already past the point of noticing - recording nothing
+	 * while the panel showed the idle card. It presents as "I pressed Start
+	 * and nothing happened".
+	 */
+	private final Consumer<Runnable> onClientThread;
 
 	private final CardLayout cardLayout = new CardLayout();
 	private final JPanel cards = new JPanel(cardLayout);
@@ -132,7 +147,8 @@ class CurrentView extends JPanel
 	}
 
 	CurrentView(SessionManager sessionManager, ItemUseStore itemUseStore, Map<Integer, String> itemNames,
-		ItemManager itemManager, SkillIconManager skillIconManager, Runnable onAction)
+		ItemManager itemManager, SkillIconManager skillIconManager, Runnable onAction,
+		Consumer<Runnable> onClientThread)
 	{
 		this.sessionManager = sessionManager;
 		this.itemUseStore = itemUseStore;
@@ -140,6 +156,7 @@ class CurrentView extends JPanel
 		this.itemManager = itemManager;
 		this.skillIconManager = skillIconManager;
 		this.onAction = onAction;
+		this.onClientThread = onClientThread;
 
 		this.actionsRow = Ui.tileRow(
 			Ui.tile("ACTIONS", actionsValue, false),
@@ -275,14 +292,8 @@ class CurrentView extends JPanel
 
 		JButton start = flatButton("Start", true);
 		JButton ignore = flatButton("Ignore", false);
-		start.addActionListener(e -> {
-			sessionManager.start();
-			onAction.run();
-		});
-		ignore.addActionListener(e -> {
-			sessionManager.ignore();
-			onAction.run();
-		});
+		start.addActionListener(e -> act(sessionManager::start));
+		ignore.addActionListener(e -> act(sessionManager::ignore));
 		JPanel buttons = new JPanel(new GridLayout(1, 2, 4, 0));
 		buttons.setOpaque(false);
 		buttons.add(start);
@@ -400,7 +411,10 @@ class CurrentView extends JPanel
 		p.add(Ui.gap(8));
 		p.add(projectionPanel);
 
-		pauseResumeButton.addActionListener(e -> {
+		// the ACTIVE test moves onto the client thread with the mutation it
+		// guards - reading state here and acting on it there would reopen
+		// the same gap in miniature
+		pauseResumeButton.addActionListener(e -> act(() -> {
 			if (sessionManager.getState() == SessionState.ACTIVE)
 			{
 				sessionManager.pause();
@@ -409,12 +423,8 @@ class CurrentView extends JPanel
 			{
 				sessionManager.resume();
 			}
-			onAction.run();
-		});
-		stopButton.addActionListener(e -> {
-			sessionManager.stop();
-			onAction.run();
-		});
+		}));
+		stopButton.addActionListener(e -> act(sessionManager::stop));
 		JPanel controls = new JPanel(new GridLayout(1, 2, 4, 0));
 		controls.setOpaque(false);
 		controls.add(pauseResumeButton);
@@ -423,6 +433,18 @@ class CurrentView extends JPanel
 		p.add(Ui.fixHeight(controls));
 
 		return wrapTop(p);
+	}
+
+	/**
+	 * Runs a session mutation on the client thread, then repaints. The
+	 * repaint is queued from here rather than from inside the hop so the
+	 * panel stays responsive even if the client thread is busy; the next
+	 * tick would refresh it anyway.
+	 */
+	private void act(Runnable mutation)
+	{
+		onClientThread.accept(mutation);
+		onAction.run();
 	}
 
 	// ------------------------------------------------------------------

@@ -10,6 +10,7 @@ import java.awt.FlowLayout;
 import java.awt.image.BufferedImage;
 import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.Set;
 import javax.swing.BorderFactory;
 import javax.swing.ImageIcon;
@@ -49,7 +50,7 @@ public class SkillingInfoPanel extends PluginPanel
 	private Skill selectedSkill;
 	private Set<Skill> renderedSkills = new LinkedHashSet<>();
 
-	public SkillingInfoPanel(SessionManager sessionManager, SkillIconManager skillIconManager, ItemUseStore itemUseStore, Map<Integer, String> itemNames, ItemManager itemManager, BufferedImage pluginIcon)
+	public SkillingInfoPanel(SessionManager sessionManager, SkillIconManager skillIconManager, ItemUseStore itemUseStore, Map<Integer, String> itemNames, ItemManager itemManager, BufferedImage pluginIcon, Consumer<Runnable> onClientThread)
 	{
 		super(false);
 		this.sessionManager = sessionManager;
@@ -59,7 +60,7 @@ public class SkillingInfoPanel extends PluginPanel
 		setLayout(new BorderLayout());
 		setBackground(Palette.PANEL);
 
-		currentView = new CurrentView(sessionManager, itemUseStore, itemNames, itemManager, skillIconManager, this::refresh);
+		currentView = new CurrentView(sessionManager, itemUseStore, itemNames, itemManager, skillIconManager, this::refresh, onClientThread);
 		historyView = new HistoryView(itemNames, itemManager);
 
 		cards.add(currentView, CURRENT_CARD);
