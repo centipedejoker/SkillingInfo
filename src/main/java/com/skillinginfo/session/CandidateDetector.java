@@ -57,10 +57,27 @@ public final class CandidateDetector
 			return Optional.empty();
 		}
 
-		int totalXp = events.stream().mapToInt(QualifyingXpEvent::getXpDelta).sum();
-		long elapsedSeconds = ticksToSeconds(last.getTick() - first.getTick());
+		return Optional.of(summarise(skill, buffer));
+	}
 
-		return Optional.of(new PromptSummary(skill, events.size(), elapsedSeconds, totalXp));
+	/**
+	 * `[v9]` The buffer as the prompt describes it, with no gate applied.
+	 * <p>
+	 * Split out because the offer has to keep pace with what accepting it
+	 * would actually record. The buffer goes on filling while the prompt is
+	 * up (§10 `[v9]`), so a summary frozen at the moment the gate was met
+	 * would advertise one number and hand you another the instant you
+	 * pressed Start - which is the same defect as §14 `[v9]`, one screen
+	 * earlier.
+	 */
+	static PromptSummary summarise(Skill skill, CandidateBuffer buffer)
+	{
+		List<QualifyingXpEvent> events = buffer.events();
+		int totalXp = events.stream().mapToInt(QualifyingXpEvent::getXpDelta).sum();
+		long elapsedSeconds = ticksToSeconds(
+			events.get(events.size() - 1).getTick() - events.get(0).getTick());
+
+		return new PromptSummary(skill, events.size(), elapsedSeconds, totalXp);
 	}
 
 	static int secondsToTicks(int seconds)

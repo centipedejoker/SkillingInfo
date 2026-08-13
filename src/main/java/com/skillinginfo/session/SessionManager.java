@@ -566,7 +566,10 @@ public class SessionManager
 				currentTick, increased, decreased, lastXpCreditTick, state);
 		}
 
-		if (state == SessionState.CANDIDATE && currentTick - lastCandidateXpTick <= GENERATION_WINDOW_TICKS)
+		// `[v9]` PROMPTED buffers too - the player is still producing while
+		// the offer is on screen, and start() replays both buffers
+		if ((state == SessionState.CANDIDATE || state == SessionState.PROMPTED)
+			&& currentTick - lastCandidateXpTick <= GENERATION_WINDOW_TICKS)
 		{
 			for (Map.Entry<Integer, Integer> entry : increased.entrySet())
 			{
@@ -872,9 +875,20 @@ public class SessionManager
 			return;
 		}
 
-		if (state == SessionState.ACTIVE || state == SessionState.PAUSED || state == SessionState.PROMPTED)
+		if (state == SessionState.ACTIVE || state == SessionState.PAUSED)
 		{
-			// a session/prompt for a different tracking group is already in flight
+			// a session for a different tracking group is already running
+			return;
+		}
+
+		// `[v9]` A prompt for a *different* group blocks, as it always did.
+		// One for this group does not: the player is still doing the thing
+		// they are being asked about, and everything they do while deciding
+		// used to be dropped on the floor - not buffered, not credited -
+		// while start() went on to back-date startedAt across that window
+		// anyway. Falling through to the buffer below is the whole fix.
+		if (state == SessionState.PROMPTED && groupKey != candidateGroupKey)
+		{
 			return;
 		}
 
@@ -896,12 +910,17 @@ public class SessionManager
 			return;
 		}
 
-		if (state != SessionState.CANDIDATE)
+		if (state != SessionState.CANDIDATE && state != SessionState.PROMPTED)
 		{
 			log.debug("Candidate opened: skill={} groupKey={} tick={}", skill, groupKey, currentTick);
 		}
 		candidateGroupKey = groupKey;
-		state = SessionState.CANDIDATE;
+		if (state != SessionState.PROMPTED)
+		{
+			// `[v9]` a live prompt keeps collecting; it must not be reset
+			// back to CANDIDATE underneath the player
+			state = SessionState.CANDIDATE;
+		}
 		lastCandidateXpTick = currentTick;
 		buffers.computeIfAbsent(groupKey, s -> new CandidateBuffer()).add(new QualifyingXpEvent(skill, delta, currentTick));
 	}
@@ -955,6 +974,13 @@ public class SessionManager
 
 	private void tickPrompted()
 	{
+		// `[v9]` keep the offer honest as the buffer behind it grows
+		CandidateBuffer buffer = buffers.get(candidateGroupKey);
+		if (buffer != null && !buffer.isEmpty())
+		{
+			pendingPrompt = CandidateDetector.summarise(candidateGroupKey, buffer);
+		}
+
 		if (currentTick >= promptExpiresAtTick)
 		{
 			// SPEC.md §10: expiry discards the buffer

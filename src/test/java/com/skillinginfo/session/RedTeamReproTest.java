@@ -211,60 +211,6 @@ public class RedTeamReproTest
 	}
 
 	// =============================================================
-	// F3 - the prompt window is a black hole
-	// =============================================================
-
-	/**
-	 * PROMPTED returns early from processQualifyingEvent and never fills
-	 * candidateGeneratedBuffer, so XP, actions and items produced while the
-	 * prompt is up are dropped - yet start() still back-dates startedAt across
-	 * that window.
-	 */
-	@Test
-	public void everythingEarnedWhileThePromptIsUpIsSilentlyDiscarded()
-	{
-		SessionManager m = seeded();
-		int xp = 0;
-		int qty = 0;
-		int tick = 0;
-		m.onStatChanged(Skill.WOODCUTTING, 0); // login sync
-		for (int i = 0; i < 3; i++) // reach the gate
-		{
-			tick += 2;
-			xp += 100;
-			qty++;
-			m.onStatChanged(Skill.WOODCUTTING, xp);
-			m.onInventoryChanged(items(LOGS, qty));
-			m.onGameTick(tick);
-		}
-		assertEquals(SessionState.PROMPTED, m.getState());
-		int atPrompt = m.getPendingPrompt().getTotalXp();
-
-		for (int i = 0; i < 5; i++) // keep chopping while deciding
-		{
-			tick += 2;
-			xp += 100;
-			qty++;
-			m.onStatChanged(Skill.WOODCUTTING, xp);
-			m.onInventoryChanged(items(LOGS, qty));
-			m.onGameTick(tick);
-		}
-		assertEquals(SessionState.PROMPTED, m.getState());
-
-		m.start();
-		ActivitySession s = m.getCurrentSession();
-		assertEquals("bug: the five logs cut during the prompt are gone",
-			atPrompt, s.getXpGained(Skill.WOODCUTTING));
-		assertEquals("bug: only the pre-prompt actions survive", 3, s.getActions());
-		assertEquals("bug: only the pre-prompt logs survive", 3, entry(m, LOGS).getGenerated());
-
-		long backdatedSeconds = java.time.Duration
-			.between(s.getStartedAt(), java.time.Instant.now()).getSeconds();
-		assertTrue("startedAt covers " + backdatedSeconds + "s of a session that recorded 3 actions",
-			backdatedSeconds >= 8);
-	}
-
-	// =============================================================
 	// F12 - a stale Take click steals later skilling output
 	// =============================================================
 

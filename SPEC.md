@@ -327,6 +327,12 @@ buffered candidate → IGNORE or expiry → discard buffer
 
 Buffers must be bounded.
 
+**`[v9]` Buffering continues while the prompt is on screen, not just while CANDIDATE.** It previously stopped the moment the gate was met: `PROMPTED` returned early from qualifying-event handling, so XP, actions and output produced while the offer sat there were dropped outright — not buffered, not credited. Meanwhile `start()` back-dated `startedAt` to the first buffered drop *regardless*, so with the default 15-second timeout a session could begin its life claiming up to fifteen seconds it had no record of. That also made `endedAt − startedAt` exceed `totalSeconds`, which any external consumer under §45 would trip over.
+
+This is the same reasoning that produced the `candidateGeneratedBuffer` in v7 — "so a session doesn't undercount relative to the XP total it started with" — applied to the window that fix didn't cover. Retroactive start (§6) is only coherent if the buffers span everything `startedAt` claims.
+
+Two consequences worth stating. A prompt for a *different* tracking group still blocks, exactly as before (§7a's single-slot rule is untouched); only the group being offered goes on collecting. And **the prompt's own figure now moves as the buffer grows**, which is a deliberate UI decision rather than a side effect: the offer is a promise about what accepting it will record, so a total frozen at the gate would advertise one number and hand over another the instant Start was pressed — §14 `[v9]`'s defect, one screen earlier. The prompt already carries a draining timeout bar, so a figure that moves is not a new kind of motion on that panel.
+
 ## 11. CURRENT SESSION UI
 
 ```
