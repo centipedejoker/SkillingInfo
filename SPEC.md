@@ -150,6 +150,17 @@ Before implementing any subsystem, inspect existing accepted RuneLite/core imple
 
 **RuneLite XP Tracker** — reuse established approaches for `StatChanged`, XP deltas, XP/hour, actions, session state.
 
+**`[v9]` Every baseline must be dropped when the account changes, and the account can change without a login screen.** `StatChanged` reports a running total, so the plugin keeps each skill's last-seen value to derive a delta. A stale baseline does not decay: it converts the *next* account's first sync into one enormous gain. Logging out of a 500k Woodcutting alt and into a 10m main offered a session reading `+9,500,200 XP` — and pressing Start would have written that to an append-only history file. The plugin's own tags include `ironman`, an audience for whom alt-swapping is routine.
+
+Two things this taught, both borrowed straight from XP Tracker rather than invented:
+
+- **`LOGGED_IN` is not a login.** It fires on every region change — teleports, dungeons, boats, hops. RuneLite's own handler says so in a comment and guards on the account hash and world type instead. This spec had been treating the event as though it meant what its name says.
+- **The login screen is not the only way to change account.** A reconnect can land on a different one without passing through it, so the reset has to be driven by the observed account hash, not by a state transition.
+
+Resetting means every baseline, not just the XP one: both inventory delta trackers, each side container, and the bank snapshot. A different account's inventory has nothing to do with the last one's, and diffing across the two would read the whole difference as arrivals and departures. Each reset arranges for the *next* snapshot to re-baseline silently rather than to be read as a delta, so the fix doesn't reintroduce the v6 bug in a new place.
+
+Rejected: discarding implausibly large deltas by threshold. A lamp or a quest reward is also large; the defect was a stale baseline, not a big number.
+
 **Bossing Info** (Plugin Hub internal name `kph-tracker`; source: [Mrnice98/BossingInfo](https://github.com/Mrnice98/BossingInfo)) — reference for side-panel layout, session controls, idle handling, rate presentation, history, session lifecycle. `[v3]` A full source read confirms this plugin is the same framework this spec describes, built for bosses instead of skills. Specific things worth borrowing:
   - **Resume-on-next-event.** `chatMessageFilter()` auto-resumes a paused session the instant the next qualifying chat message arrives, rather than re-running the full detection gate. This is exactly §7 [v2]'s single-event resume, already shipped and working elsewhere.
   - **Idle-inclusive vs. idle-exclusive rate split** (`calcMode` 0 = "Actual," 1 = "Virtual"). Same concept as §14's active/overall XP-per-hour, independently validated.

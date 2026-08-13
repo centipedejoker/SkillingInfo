@@ -13,6 +13,7 @@ import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -25,6 +26,7 @@ import net.runelite.api.GameState;
 import net.runelite.api.ItemComposition;
 import net.runelite.api.MenuAction;
 import net.runelite.api.TileItem;
+import net.runelite.api.WorldType;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
@@ -111,6 +113,11 @@ public class SkillingInfoPlugin extends Plugin
 	// resolving it means an ItemComposition lookup, and this is consulted
 	// from the per-tick item-flow correlation.
 	private final Map<Integer, Integer> unnotedIds = new ConcurrentHashMap<>();
+
+	// §5 [v9]: what the last LOGGED_IN was for. Compared rather than assumed
+	// because that event also fires on every region change.
+	private long lastAccountHash = -1;
+	private EnumSet<WorldType> lastWorldType = EnumSet.noneOf(WorldType.class);
 
 	private ItemUseStore itemUseStore;
 	private SessionRepository sessionRepository;
@@ -342,6 +349,24 @@ public class SkillingInfoPlugin extends Plugin
 	{
 		if (event.getGameState() == GameState.LOGGED_IN)
 		{
+			// LOGGED_IN fires between region changes too - every teleport,
+			// dungeon, boat and world hop - so this is emphatically not a
+			// "the player just logged in" hook. RuneLite's own XP Tracker
+			// says as much in the same handler, and guards the same way.
+			//
+			// §5 [v9]: the guard has to be the account hash rather than the
+			// login screen, because a reconnect can put the client on a
+			// different account without ever showing one.
+			long accountHash = client.getAccountHash();
+			EnumSet<WorldType> worldType = client.getWorldType();
+			if (accountHash == lastAccountHash && worldType.equals(lastWorldType))
+			{
+				return;
+			}
+			lastAccountHash = accountHash;
+			lastWorldType = worldType;
+
+			sessionManager.onAccountChanged();
 			// account hash isn't resolvable until now - reload so history
 			// comes from the right account's file, not the "unknown" bucket
 			// used before login (SessionRepository)

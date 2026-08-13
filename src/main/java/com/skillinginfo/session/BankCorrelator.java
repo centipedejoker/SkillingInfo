@@ -221,4 +221,17 @@ public class BankCorrelator
 		increased.clear();
 		decreased.clear();
 	}
+
+	/**
+	 * `[v9]` Drops the bank snapshot as well - a different account's bank has
+	 * nothing to do with the last one's, and diffing across the two would
+	 * read the whole difference as one enormous deposit. The next sighting
+	 * re-establishes the baseline silently, exactly as the first one did.
+	 */
+	public void resetForNewAccount()
+	{
+		reset();
+		lastSnapshot.clear();
+		baselineEstablished = false;
+	}
 }

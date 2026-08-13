@@ -7,6 +7,7 @@ import static com.skillinginfo.session.SessionManagerHarness.entry;
 import static com.skillinginfo.session.SessionManagerHarness.items;
 import static com.skillinginfo.session.SessionManagerHarness.manager;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -112,6 +113,38 @@ public class SessionManagerLifecycleTest
 
 		assertEquals("the offer moved with the buffer", 400, m.getPendingPrompt().getTotalXp());
 		assertEquals(4, m.getPendingPrompt().getDropCount());
+	}
+
+	@Test
+	public void switchingAccountsDoesNotInjectTheXpDifferenceBetweenThem()
+	{
+		// XpTracker holds each skill's last-seen total, so a stale baseline
+		// doesn't decay - it turns the next account's first sync into one
+		// enormous gain. Logging into a 10m Woodcutting main after a 500k alt
+		// offered "+9,500,200 XP" and would have written it to an append-only
+		// history file. XpTracker.reset() existed for this and had no callers.
+		SessionManager m = seeded();
+		m.onStatChanged(Skill.WOODCUTTING, 500_000); // alt, first sync
+		m.onGameTick(1);
+		m.onLogout();
+
+		m.onStatChanged(Skill.WOODCUTTING, 10_000_000); // main, re-sync
+		m.onGameTick(2);
+		m.onStatChanged(Skill.WOODCUTTING, 10_000_100);
+		m.onGameTick(4);
+		m.onStatChanged(Skill.WOODCUTTING, 10_000_200);
+		m.onGameTick(6);
+
+		// the re-sync is a sync, not a gain, so only two real drops follow -
+		// one short of the gate
+		assertEquals("no session offered on the strength of a phantom",
+			SessionState.CANDIDATE, m.getState());
+		assertNull(m.getPendingPrompt());
+
+		m.onStatChanged(Skill.WOODCUTTING, 10_000_300);
+		m.onGameTick(8);
+		assertEquals(SessionState.PROMPTED, m.getState());
+		assertEquals("worth what was actually gained", 300, m.getPendingPrompt().getTotalXp());
 	}
 
 	@Test

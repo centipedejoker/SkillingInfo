@@ -476,12 +476,38 @@ public class SessionManager
 		}
 	}
 
+	/**
+	 * `[v9]` The client is now looking at a different account, which may
+	 * happen without ever passing through the login screen - a reconnect or a
+	 * hop can do it. Everything baselined against the previous account has to
+	 * go, or the difference between the two is read as though the player had
+	 * earned it.
+	 */
+	public void onAccountChanged()
+	{
+		onLogout();
+	}
+
 	public void onLogout()
 	{
 		if (state == SessionState.ACTIVE || state == SessionState.PAUSED)
 		{
 			stop();
 		}
+
+		// `[v9]` XpTracker holds each skill's last-seen *total*, so a stale
+		// baseline doesn't decay - it turns the next account's first sync
+		// into a single enormous "gain". Logging into a 10m Woodcutting main
+		// after a 500k alt offered a session of +9,500,200 XP and would have
+		// written it to an append-only history file. reset() existed for this
+		// and had no callers anywhere.
+		xpTracker.reset();
+		inventoryDeltaTracker.resetForNewAccount();
+		equipmentDeltaTracker.resetForNewAccount();
+		sideContainers.values().forEach(InventoryDeltaTracker::resetForNewAccount);
+		bankCorrelator.resetForNewAccount();
+		lastRemainingAmount = -1;
+
 		buffers.clear();
 		pendingTickDeltas.clear();
 		candidateGroupKey = null;

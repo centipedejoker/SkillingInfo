@@ -17,17 +17,20 @@ public class InventoryDeltaTracker
 	private final Map<Integer, Integer> decreased = new HashMap<>();
 
 	/**
-	 * `[v9]` Whether the first snapshot establishes the baseline silently,
-	 * as {@link BankCorrelator} has always done.
+	 * `[v9]` When set, the next snapshot only establishes the baseline and
+	 * emits no deltas - the same guard {@link BankCorrelator} has always had.
 	 * <p>
-	 * The inventory and worn containers are populated at login, long before
-	 * any session, so their first diff is drained while IDLE and harmless.
-	 * A looting bag or seed box is different: RuneLite may not surface its
-	 * contents until the player opens it, which can happen mid-session and
-	 * would then read as the whole bag arriving at once.
+	 * Set at construction for containers RuneLite may not surface until the
+	 * player opens them: a looting bag or seed box first seen mid-session
+	 * would otherwise read as the whole bag arriving at once. The inventory
+	 * and worn containers don't need it - they are populated at login, long
+	 * before any session, so their first diff is drained while IDLE.
+	 * <p>
+	 * Set again by {@link #resetForNewAccount()}, where every container has
+	 * the problem: a different account's inventory has nothing to do with the
+	 * last one's.
 	 */
-	private final boolean baselineFirstSnapshot;
-	private boolean baselineEstablished;
+	private boolean pendingBaseline;
 
 	public InventoryDeltaTracker()
 	{
@@ -36,7 +39,7 @@ public class InventoryDeltaTracker
 
 	public InventoryDeltaTracker(boolean baselineFirstSnapshot)
 	{
-		this.baselineFirstSnapshot = baselineFirstSnapshot;
+		this.pendingBaseline = baselineFirstSnapshot;
 	}
 
 	public void onInventoryChanged(Item[] items)
@@ -51,7 +54,7 @@ public class InventoryDeltaTracker
 			current.merge(item.getId(), item.getQuantity(), Integer::sum);
 		}
 
-		if (!baselineFirstSnapshot || baselineEstablished)
+		if (!pendingBaseline)
 		{
 			for (Map.Entry<Integer, Integer> entry : current.entrySet())
 			{
@@ -71,7 +74,7 @@ public class InventoryDeltaTracker
 			}
 		}
 
-		baselineEstablished = true;
+		pendingBaseline = false;
 		lastSnapshot.clear();
 		lastSnapshot.putAll(current);
 	}
@@ -101,5 +104,21 @@ public class InventoryDeltaTracker
 	{
 		increased.clear();
 		decreased.clear();
+	}
+
+	/**
+	 * `[v9]` Drops the diffing baseline as well, for when the containers
+	 * being diffed now belong to a *different account*. Unlike
+	 * {@link #reset()}, keeping the old snapshot here would be actively
+	 * wrong - it describes someone else's inventory.
+	 * <p>
+	 * The next snapshot is treated as a baseline rather than as an arrival,
+	 * so this doesn't reintroduce the v6 bug in a new place.
+	 */
+	public void resetForNewAccount()
+	{
+		reset();
+		lastSnapshot.clear();
+		pendingBaseline = true;
 	}
 }

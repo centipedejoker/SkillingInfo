@@ -114,39 +114,6 @@ public class RedTeamReproTest
 	}
 
 	// =============================================================
-	// F4 - XpTracker is never reset on logout
-	// =============================================================
-
-	/**
-	 * Log out of an alt with 500k Woodcutting XP, log into a main with 10m.
-	 * XpTracker keeps the alt's baseline, so the new account's first sync is
-	 * read as a 9.5m gain and offered as a real session.
-	 */
-	@Test
-	public void accountSwitchInjectsThePhantomXpDifference()
-	{
-		SessionManager m = seeded();
-		m.onStatChanged(Skill.WOODCUTTING, 500_000); // alt, first sync
-		m.onGameTick(1);
-		m.onLogout();
-
-		// main logs in: RuneLite re-syncs every skill's total
-		m.onStatChanged(Skill.WOODCUTTING, 10_000_000);
-		m.onGameTick(2);
-		m.onStatChanged(Skill.WOODCUTTING, 10_000_100);
-		m.onGameTick(4);
-		m.onStatChanged(Skill.WOODCUTTING, 10_000_200);
-		m.onGameTick(6);
-
-		assertEquals(SessionState.PROMPTED, m.getState());
-		assertEquals("bug: prompt offers a 9.5m XP woodcutting session",
-			9_500_200, m.getPendingPrompt().getTotalXp());
-		m.start();
-		assertEquals("bug: and records it", 9_500_200,
-			m.getCurrentSession().getXpGained(Skill.WOODCUTTING));
-	}
-
-	// =============================================================
 	// F5 - projection drops the unbanked remainder
 	// =============================================================
 
