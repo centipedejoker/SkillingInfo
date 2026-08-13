@@ -39,13 +39,25 @@ public final class ProjectionBuilder
 				continue;
 			}
 
-			// §33: prefer confirmed-banked quantity, fall back to retained.
-			boolean banked = entry.getBanked() > 0;
-			int qty = banked ? entry.getBanked() : entry.getNetRetained();
+			// §33 `[v9]`: the quantity is everything retained, and the
+			// confidence describes it.
+			//
+			// This used to read `banked > 0 ? banked : netRetained`, which
+			// looks like a preference for the stronger figure but is a
+			// subset error: banking deliberately does not reduce net retained
+			// (§28), so netRetained already *contains* banked. The moment
+			// anything was banked, everything still in the inventory
+			// vanished from the projection - fish 27 sharks, bank them, fish
+			// 27 more, and it reported half of what was held. Worse, §33
+			// freezes the projection at finalisation, so the wrong figure
+			// was permanent.
+			int qty = entry.getNetRetained();
 			if (qty <= 0)
 			{
 				continue;
 			}
+			// the label can only claim "banked" when all of it is
+			boolean fullyBanked = entry.getBanked() >= qty;
 
 			projections.add(new ProjectedXp(
 				entry.getItemId(),
@@ -54,7 +66,7 @@ public final class ProjectionBuilder
 				use.label,
 				use.skill,
 				qty * use.xpPerItem,
-				banked ? CONFIRMED_BANKED : RETAINED));
+				fullyBanked ? CONFIRMED_BANKED : RETAINED));
 		}
 
 		return projections;

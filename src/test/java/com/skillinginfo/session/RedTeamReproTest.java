@@ -4,17 +4,12 @@ import static com.skillinginfo.session.SessionManagerHarness.entry;
 import static com.skillinginfo.session.SessionManagerHarness.items;
 import static com.skillinginfo.session.SessionManagerHarness.manager;
 import static com.skillinginfo.session.SessionManagerHarness.startedSession;
-import java.util.List;
 import net.runelite.api.Skill;
-import net.runelite.client.config.ConfigManager;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import org.junit.Test;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 /**
  * Reproductions for the red-team review. EVERY assertion marked "bug:" pins
@@ -111,37 +106,6 @@ public class RedTeamReproTest
 		assertEquals("bug", 20, entry(m, RAW_SHARK).getConsumed());
 		assertEquals("bug", 500_000, entry(m, COINS).getConsumed());
 		assertEquals("bug", 500_020, m.getCurrentSession().getTotalConsumed());
-	}
-
-	// =============================================================
-	// F5 - projection drops the unbanked remainder
-	// =============================================================
-
-	/**
-	 * 54 sharks caught, 27 banked, 27 still held. Banking does not reduce net
-	 * retained, so the projection should cover all 54.
-	 */
-	@Test
-	public void projectionIgnoresEverythingNotYetBanked()
-	{
-		ConfigManager cm = mock(ConfigManager.class);
-		when(cm.getConfiguration(anyString(), anyString())).thenReturn(null);
-		ItemUseStore store = new ItemUseStore(cm);
-
-		ActivitySession session = new ActivitySession();
-		session.setSkill(Skill.FISHING);
-		session.addGenerated(RAW_SHARK, 54);
-		session.addBanked(RAW_SHARK, 27);
-
-		assertEquals("net retained is unaffected by banking", 54,
-			session.getItemFlow().iterator().next().getNetRetained());
-
-		List<ProjectedXp> projection = ProjectionBuilder.build(session, store);
-		assertEquals(1, projection.size());
-		assertEquals("bug: only the banked 27 are projected", 27, projection.get(0).getQuantity());
-		assertEquals("bug", 27 * 210.0, projection.get(0).getXp(), 0.001);
-		assertEquals("bug: whole figure claims banked confidence",
-			ProjectionBuilder.CONFIRMED_BANKED, projection.get(0).getConfidence());
 	}
 
 	// =============================================================

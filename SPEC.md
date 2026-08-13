@@ -814,6 +814,12 @@ RETAINED QUANTITY
 ACQUIRED QUANTITY
 ```
 
+**`[v9]` The ordering ranks the *label*, not the quantity — reading it as a quantity preference was a subset error.** The implementation took `banked > 0 ? banked : netRetained`, which looks like "prefer the stronger figure" but isn't: banking deliberately does not reduce net retained (§28), so net retained already *contains* the banked amount. The moment anything was banked, everything still in the inventory dropped out of the projection. Fish 27 sharks, bank them, fish 27 more, and it reported `~ +5.7k Cooking (banked)` against 54 sharks worth 11.3k — and since §33 freezes the projection at finalisation, that figure was permanent.
+
+The quantity is always everything retained. The confidence describes how much of it is confirmed: `CONFIRMED_BANKED` only when the banked amount covers the whole quantity, `RETAINED` otherwise. A label that claims banked confidence for a stack half of which is still in the inventory is making the stronger claim about the weaker evidence, which is the inverse of what this section is for.
+
+Rejected: emitting two rows per item, one banked and one retained. More faithful, but it changes the persisted v2 shape for a distinction `totals()` immediately collapses anyway.
+
 **`[v2]` This ordering must be a first-class field, not just display language.** Add `confidenceLevel: CONFIRMED_BANKED | RETAINED | ACQUIRED_ONLY` to the Future XP data model. Default UI behaviour: only surface Future XP once confidence ≥ `RETAINED`; `ACQUIRED_ONLY` figures are hidden by default or shown clearly labelled "(estimated)" so no uncertain projection reads as earned XP. Without an explicit field, this rule has no enforcement point and risks silently degrading to "show whatever number we have."
 
 Example:

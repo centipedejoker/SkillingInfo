@@ -111,6 +111,31 @@ public class ProjectionBuilderTest
 	}
 
 	@Test
+	public void aPartlyBankedStackIsProjectedInFull()
+	{
+		// The rule used to be `banked > 0 ? banked : netRetained`, which reads
+		// like a preference for the stronger figure but is a subset error:
+		// banking deliberately doesn't reduce net retained (§28), so
+		// netRetained already contains banked. The moment anything was
+		// banked, everything still in the inventory vanished from the
+		// projection - and §33 freezes it at finalisation, so permanently.
+		FakeStore store = new FakeStore();
+		store.choose(ItemID.OAK_LOGS, "BURN");
+
+		ActivitySession s = new ActivitySession();
+		s.setSkill(Skill.WOODCUTTING);
+		s.addGenerated(ItemID.OAK_LOGS, 54);
+		s.addBanked(ItemID.OAK_LOGS, 27); // one load banked, one still carried
+
+		assertEquals("banking doesn't reduce what's held", 54, s.getTotalNetRetained());
+
+		ProjectedXp projected = ProjectionBuilder.build(s, store).get(0);
+		assertEquals(54, projected.getQuantity());
+		assertEquals("and the label can't claim banked for the half that isn't",
+			ProjectionBuilder.RETAINED, projected.getConfidence());
+	}
+
+	@Test
 	public void bankedQuantityOutranksMerelyRetained()
 	{
 		FakeStore store = new FakeStore();
