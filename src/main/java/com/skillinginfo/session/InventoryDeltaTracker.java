@@ -16,6 +16,29 @@ public class InventoryDeltaTracker
 	private final Map<Integer, Integer> increased = new HashMap<>();
 	private final Map<Integer, Integer> decreased = new HashMap<>();
 
+	/**
+	 * `[v9]` Whether the first snapshot establishes the baseline silently,
+	 * as {@link BankCorrelator} has always done.
+	 * <p>
+	 * The inventory and worn containers are populated at login, long before
+	 * any session, so their first diff is drained while IDLE and harmless.
+	 * A looting bag or seed box is different: RuneLite may not surface its
+	 * contents until the player opens it, which can happen mid-session and
+	 * would then read as the whole bag arriving at once.
+	 */
+	private final boolean baselineFirstSnapshot;
+	private boolean baselineEstablished;
+
+	public InventoryDeltaTracker()
+	{
+		this(false);
+	}
+
+	public InventoryDeltaTracker(boolean baselineFirstSnapshot)
+	{
+		this.baselineFirstSnapshot = baselineFirstSnapshot;
+	}
+
 	public void onInventoryChanged(Item[] items)
 	{
 		Map<Integer, Integer> current = new HashMap<>();
@@ -28,23 +51,27 @@ public class InventoryDeltaTracker
 			current.merge(item.getId(), item.getQuantity(), Integer::sum);
 		}
 
-		for (Map.Entry<Integer, Integer> entry : current.entrySet())
+		if (!baselineFirstSnapshot || baselineEstablished)
 		{
-			int delta = entry.getValue() - lastSnapshot.getOrDefault(entry.getKey(), 0);
-			if (delta > 0)
+			for (Map.Entry<Integer, Integer> entry : current.entrySet())
 			{
-				increased.merge(entry.getKey(), delta, Integer::sum);
+				int delta = entry.getValue() - lastSnapshot.getOrDefault(entry.getKey(), 0);
+				if (delta > 0)
+				{
+					increased.merge(entry.getKey(), delta, Integer::sum);
+				}
 			}
-		}
-		for (Map.Entry<Integer, Integer> entry : lastSnapshot.entrySet())
-		{
-			int delta = entry.getValue() - current.getOrDefault(entry.getKey(), 0);
-			if (delta > 0)
+			for (Map.Entry<Integer, Integer> entry : lastSnapshot.entrySet())
 			{
-				decreased.merge(entry.getKey(), delta, Integer::sum);
+				int delta = entry.getValue() - current.getOrDefault(entry.getKey(), 0);
+				if (delta > 0)
+				{
+					decreased.merge(entry.getKey(), delta, Integer::sum);
+				}
 			}
 		}
 
+		baselineEstablished = true;
 		lastSnapshot.clear();
 		lastSnapshot.putAll(current);
 	}

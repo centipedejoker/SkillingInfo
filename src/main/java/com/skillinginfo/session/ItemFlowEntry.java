@@ -25,6 +25,20 @@ public class ItemFlowEntry
 	private int consumed;
 	private int banked;
 
+	/**
+	 * SPEC.md §18/§50 `[v9]`: left the inventory, no explanation, and the
+	 * activity has no inputs it could have been (§18 `[v9]`). Coal bags, herb
+	 * sacks, gem sacks and the Motherlode hopper all land here - they have no
+	 * client-side container, so the item genuinely vanishes as far as the
+	 * plugin can see.
+	 * <p>
+	 * Deliberately absent from {@link #getNetRetained()}: the coal is in the
+	 * bag, not destroyed, and booking it as consumption made a full 27-coal
+	 * trip report `0.0% RETAINED`. §50 keeps it off the screen; the point is
+	 * that it stops corrupting the figures that are on the screen.
+	 */
+	private int otherLoss;
+
 	// SPEC.md §20b: skilling output is unambiguously the session's own,
 	// there's no shared-tile provenance question the way there is for
 	// combat loot picked off the ground - PER_DROP by default.
@@ -91,6 +105,12 @@ public class ItemFlowEntry
 		banked += qty;
 	}
 
+	/** SPEC.md §18/§50 `[v9]`: gone, with no explanation and no input it could have been. */
+	void addOtherLoss(int qty)
+	{
+		otherLoss += qty;
+	}
+
 	/**
 	 * SPEC.md §28: net retained = acquired - discards - consumption ±
 	 * repickup. Banking deliberately does NOT reduce this - a banked item
@@ -98,6 +118,10 @@ public class ItemFlowEntry
 	 * gain, not a loss. Consumption does reduce it: those items are gone.
 	 * Clamped at zero because a session can legitimately consume items it
 	 * never acquired (cooking a stack you already had).
+	 * <p>
+	 * `[v9]` {@code otherLoss} is deliberately not subtracted. An
+	 * unexplained disappearance is not evidence of destruction, and treating
+	 * it as such is what made a banked coal-bag trip read `0.0% RETAINED`.
 	 */
 	public int getNetRetained()
 	{

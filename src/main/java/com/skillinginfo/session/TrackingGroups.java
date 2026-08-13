@@ -67,6 +67,32 @@ public final class TrackingGroups
 	}
 
 	/**
+	 * Activities that have no inputs at all (SPEC.md §18 `[v9]`).
+	 * <p>
+	 * You cannot consume a log by chopping or a coal by mining - there is
+	 * nothing these activities use up. So an unexplained inventory decrease
+	 * during one of them is never consumption, whatever else it might be; it
+	 * is a coal bag, a gem sack, the Motherlode hopper, or a deposit box.
+	 * Booking those as consumption is what made a full 27-coal trip report
+	 * `0.0% RETAINED`.
+	 * <p>
+	 * Deliberately a short list of skills with <em>no</em> inputs rather than
+	 * a long list of ones that have them, because the honest answer for most
+	 * skills is "yes, sometimes": Fishing consumes bait, Hunter consumes
+	 * traps and bait, Farming consumes seeds, and combat consumes food and
+	 * potions. Claiming certainty about those would trade a wrong `0%` for a
+	 * wrong inventory ledger. This asserts only where there is no doubt, so
+	 * everything absent keeps the pre-`[v9]` behaviour.
+	 */
+	public static boolean consumesNothing(Skill groupKey)
+	{
+		return groupKey == Skill.MINING
+			|| groupKey == Skill.WOODCUTTING
+			|| groupKey == Skill.AGILITY
+			|| groupKey == Skill.THIEVING;
+	}
+
+	/**
 	 * @return the primary group key when {@code groupKeys} is one primary
 	 * plus only its own known byproducts (so it's a single action, not
 	 * §9's reward burst), otherwise null.

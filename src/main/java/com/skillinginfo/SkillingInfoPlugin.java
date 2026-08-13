@@ -1,5 +1,6 @@
 package com.skillinginfo;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.inject.Provides;
 import com.skillinginfo.session.ActivitySession;
 import com.skillinginfo.session.ItemFlowEntry;
@@ -14,6 +15,7 @@ import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import javax.inject.Inject;
 import javax.swing.SwingUtilities;
@@ -61,6 +63,23 @@ import net.runelite.client.ui.NavigationButton;
 @PluginDependency(SlayerPlugin.class)
 public class SkillingInfoPlugin extends Plugin
 {
+	/**
+	 * §18 `[v9]`: containers other than the bank that an item can move into
+	 * while staying on the account, and that RuneLite actually surfaces as an
+	 * {@code ItemContainerChanged}. Without these, stowing something reads as
+	 * an unexplained inventory decrease.
+	 * <p>
+	 * Whether each fires promptly (rather than only when the player opens the
+	 * container) is not guaranteed, and is why §50's unexplained-loss bucket
+	 * remains the backstop rather than this list being the fix on its own.
+	 * The coal bag, herb sack and gem sack have no container here at all.
+	 */
+	private static final Set<Integer> SIDE_CONTAINERS = ImmutableSet.of(
+		InventoryID.LOOTING_BAG,
+		InventoryID.SEED_BOX,
+		InventoryID.SEED_VAULT,
+		InventoryID.INV_GROUP_TEMP);
+
 	@Inject
 	private Client client;
 
@@ -247,6 +266,11 @@ public class SkillingInfoPlugin extends Plugin
 		else if (event.getContainerId() == InventoryID.WORN)
 		{
 			sessionManager.onEquipmentChanged(event.getItemContainer().getItems());
+		}
+		else if (SIDE_CONTAINERS.contains(event.getContainerId()))
+		{
+			sessionManager.onSideContainerChanged(event.getContainerId(),
+				event.getItemContainer().getItems());
 		}
 	}
 

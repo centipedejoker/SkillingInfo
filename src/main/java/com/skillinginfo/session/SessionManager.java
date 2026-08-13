@@ -44,6 +44,19 @@ public class SessionManager
 	// from the inventory, which would otherwise look exactly like consuming
 	// it (§18 [v7]).
 	private final InventoryDeltaTracker equipmentDeltaTracker = new InventoryDeltaTracker();
+	/**
+	 * §18 `[v9]`: the other containers an item can move into without leaving
+	 * the account. Each is diffed by the same engine as the inventory and
+	 * claimed the same way, so stowing something is never mistaken for using
+	 * it up.
+	 * <p>
+	 * Keyed by {@code gameval.InventoryID}. The coal bag, herb sack and gem
+	 * sack are deliberately absent - they have no client-side container at
+	 * all, so nothing here can see them and §50's unexplained-loss bucket is
+	 * the backstop instead.
+	 */
+	private final Map<Integer, InventoryDeltaTracker> sideContainers = new HashMap<>();
+
 	private final DropCorrelator dropCorrelator = new DropCorrelator();
 	private final GroundItemTracker groundItemTracker = new GroundItemTracker();
 	private final PickupCorrelator pickupCorrelator = new PickupCorrelator();
@@ -298,6 +311,17 @@ public class SessionManager
 	}
 
 	/**
+	 * SPEC.md §18 `[v9]`: any other container the player can move items into
+	 * without losing them - looting bag, seed box, seed vault, group storage.
+	 * Diffed exactly like the worn container and claimed the same way.
+	 */
+	public void onSideContainerChanged(int containerId, Item[] items)
+	{
+		sideContainers.computeIfAbsent(containerId, id -> new InventoryDeltaTracker(true))
+			.onInventoryChanged(items);
+	}
+
+	/**
 	 * SPEC.md §21: records a Drop menu click as a pending correlation.
 	 * No-op unless a session is actually running - a click with nothing to
 	 * attribute it to isn't useful data.
@@ -527,6 +551,15 @@ public class SessionManager
 		claimWithNotes(increased, withdrawn);
 		claim(decreased, equipped);
 
+		// §18 [v9]: same treatment for every other container an item can sit
+		// in without leaving the account. An item stowed in a looting bag or
+		// a seed box has not been used up.
+		for (InventoryDeltaTracker container : sideContainers.values())
+		{
+			claim(decreased, container.consumeIncreased());
+			claim(increased, container.consumeDecreased());
+		}
+
 		if (!increased.isEmpty() || !decreased.isEmpty())
 		{
 			log.debug("Inventory delta at tick {}: increased={} decreased={} (lastXpCreditTick={}, state={})",
@@ -597,10 +630,14 @@ public class SessionManager
 
 		// the correlator reads the decrease pool without consuming it, so
 		// claim it here - otherwise a deposit would also be counted as
-		// consumption below
-		Map<Integer, Integer> confirmedBanked = bankCorrelator.resolve(decreased,
-			itemId -> currentSession.getOutstandingForBanking(itemId));
-		claim(decreased, confirmedBanked);
+		// consumption below. `[v9]`: everything the deposit *explains* is
+		// claimed, which is more than the session may *credit* - depositing
+		// stock you already had is capped to zero by §25a step 4, and used
+		// to fall through to consumption as a result.
+		BankCorrelator.Resolution banked = bankCorrelator.resolve(decreased,
+			itemId -> currentSession.getOutstandingForBanking(itemId), unnotedId);
+		claim(decreased, banked.getExplained());
+		Map<Integer, Integer> confirmedBanked = banked.getCredited();
 		for (Map.Entry<Integer, Integer> entry : confirmedBanked.entrySet())
 		{
 			log.debug("Crediting banked: itemId={} qty={}", entry.getKey(), entry.getValue());
@@ -740,10 +777,24 @@ public class SessionManager
 			return;
 		}
 
+		// §18 [v9]: an activity with no inputs cannot have consumed anything,
+		// so whatever left is an unexplained loss (§50) - a coal bag, a gem
+		// sack, a deposit box. Recorded rather than discarded, but never
+		// netted off: the coal is in the bag, not destroyed.
+		boolean canConsume = !TrackingGroups.consumesNothing(currentSession.getSkill());
+
 		for (Map.Entry<Integer, Integer> entry : decreased.entrySet())
 		{
-			log.debug("Crediting consumed: itemId={} qty={}", entry.getKey(), entry.getValue());
-			currentSession.addConsumed(entry.getKey(), entry.getValue());
+			if (canConsume)
+			{
+				log.debug("Crediting consumed: itemId={} qty={}", entry.getKey(), entry.getValue());
+				currentSession.addConsumed(entry.getKey(), entry.getValue());
+			}
+			else
+			{
+				log.debug("Crediting other loss: itemId={} qty={}", entry.getKey(), entry.getValue());
+				currentSession.addOtherLoss(entry.getKey(), entry.getValue());
+			}
 		}
 	}
 
@@ -988,6 +1039,7 @@ public class SessionManager
 		clock.reset();
 		inventoryDeltaTracker.reset();
 		equipmentDeltaTracker.reset();
+		sideContainers.values().forEach(InventoryDeltaTracker::reset);
 		dropCorrelator.reset();
 		pickupCorrelator.reset();
 		bankCorrelator.reset();
@@ -1068,6 +1120,7 @@ public class SessionManager
 		clock.reset();
 		inventoryDeltaTracker.reset();
 		equipmentDeltaTracker.reset();
+		sideContainers.values().forEach(InventoryDeltaTracker::reset);
 		dropCorrelator.reset();
 		pickupCorrelator.reset();
 		bankCorrelator.reset();

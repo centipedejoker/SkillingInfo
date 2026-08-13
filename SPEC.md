@@ -476,7 +476,25 @@ OTHER_INVENTORY_LOSS
 
 This makes the recipe table described below **unnecessary for correct accounting**: cooking 100 raw sharks records 100 consumed and 100 generated independently, which nets out correctly without needing to know that one specifically became the other. A recipe table would only add the ability to *say* A became B, which nothing currently displays. `ITEM_TRANSFORMED` therefore remains unimplemented by choice, not by omission.
 
-Known limitation, accepted: moving items into a container that isn't the bank — a looting bag, POH storage — reads as consumption. That undercounts retention rather than inventing gain, which is the side §27 says to err on.
+~~Known limitation, accepted: moving items into a container that isn't the bank — a looting bag, POH storage — reads as consumption. That undercounts retention rather than inventing gain, which is the side §27 says to err on.~~
+
+**`[v9]` That limitation is withdrawn, and the reasoning behind it was wrong.** Two errors, one of fact and one of principle.
+
+The factual one: this was never a mild undercount. A standard 27-coal trip with a coal bag makes the headline block read **`RETAINED 0.0% — 0 kept, 27 lost`** for a trip that banked every coal. The same holds for a herb sack on a Slayer task, a gem sack at gem rocks, and pay-dirt fed into the Motherlode hopper. Mining is one of the skills §61 marks as implemented but never played, which is why this survived to a pre-submission review.
+
+The principled one: **a figure floored at zero is not a smaller claim than the truth, it is a different claim.** §27's preference for undercounting is about *unattributed gain* — the discipline of not crediting a bank increase you cannot tie to the session. It says nothing about a derived headline ratio, and `0.0% RETAINED` does not read as "the plugin was being careful". It reads as "the plugin worked, and your trip was wasted". Erring toward silence is conservative; erring toward a confident wrong number is not, and §27 was being cited for the second while only licensing the first.
+
+The fix has two independent halves, because the containers divide into two kinds.
+
+**Containers RuneLite exposes** — looting bag, seed box, seed vault, group storage — are claimed exactly as the worn container already is (§18 `[v8]`), in both directions. Nothing new in principle; the `[v8]` fix simply stopped at two containers when the argument applied to all of them.
+
+**Containers it does not** — coal bag, herb sack, gem sack, and the Motherlode hopper — have no client-side container at all, so no claim is possible even in principle. For these, §50's `OTHER_INVENTORY_LOSS` is resurrected: the spec defined it and the implementation quietly dropped it. It is excluded from net retained and never shown (§50 still holds), so the coal-bag trip reads `27 kept` rather than `0 kept, 27 lost`.
+
+That leaves the question the whole finding turns on: **an unexplained decrease is ambiguous between "stowed" and "used up", so which does it default to?** The discriminator is a property of the activity, not of the item: *you cannot consume a log by chopping, or a coal by mining* — those activities have no inputs, so an unexplained decrease during one is never consumption, whatever else it may be. Hence `TrackingGroups.consumesNothing`.
+
+It is deliberately a short list of skills with **no** inputs rather than a long list of skills that have them, because the honest answer for most skills is "yes, sometimes": Fishing consumes bait, Hunter consumes traps, Farming consumes seeds, and combat consumes food and potions. Asserting more than that would trade a wrong `0%` for a wrong inventory ledger. Everything absent from the list keeps its pre-`[v9]` behaviour.
+
+Accepted limitations, stated rather than buried: a fish barrel during a Fishing session, and a herb sack during a Slayer task, still read as consumption, because those activities genuinely do consume things and nothing distinguishes the two cases from outside. Both undercount retention — which is the right side to fail on, now that the claim is being made about an ambiguous case rather than an unambiguous one.
 
 **`[v8]` Container transfers are claimed in both directions, for both containers.** The v7 rule above was written from the decrease side only, and the increase side had no equivalent. Three defects followed from that asymmetry, all found by driving `SessionManager` through real tick sequences rather than by reading it:
 
@@ -656,6 +674,8 @@ The original rule described the desired signal but not a computable procedure, a
    - `invDelta[itemId]` = decrease in inventory quantity vs. the previous tick
 4. Attribute `candidateBanked[itemId] = min(bankDelta[itemId], invDelta[itemId], sessionOutstanding[itemId])`. This three-way minimum is the core safeguard: it caps attribution at what the session actually holds outstanding, and refuses to attribute a bank increase unless it is backed by a same-tick inventory decrease — ruling out coincidental deposits of pre-existing bank stock or unrelated bank activity.
 5. Mark `candidateBanked` as `ITEM_BANKED` with `CONFIRMED` and decrement `sessionOutstanding` accordingly. Any leftover `bankDelta` (no matching outstanding balance, or no matching inventory decrease) is left unattributed — never recorded as session output. This is what makes §27's worked example (Death rune/Coal not attributed) a guaranteed outcome of the algorithm, not just a stated intention.
+
+   **`[v9]` Explaining a movement and crediting it are separate questions, and conflating them was a bug.** Step 4 correctly caps attribution at what the session holds outstanding — so depositing stock you were already carrying credits nothing. But the matching inventory decrease was then left in the pool, and the consumption catch-all ate it: a deposit of items you already had was recorded as having *used them up*. `resolve` now returns both figures. Everything the deposit explains is claimed out of the decrease pool so no later rule can reinterpret it; only the capped subset is credited. The cap is unchanged — what changed is that being uncreditable no longer makes a movement unexplained.
 6. Withdrawals (inventory increase + bank decrease) never touch `sessionOutstanding` — the deposit signature requires an inventory decrease, so a withdraw-then-redeposit of pre-existing stock is naturally inert and cannot be misattributed.
 
    **`[v8]` "Naturally inert" was true of this algorithm and false of the system.** A withdrawal is indeed invisible to the three-way minimum — but the inventory increase that comes with it then falls through to §16's generation catch-all, which credits *anything* unexplained arriving inside the XP window. Withdrawing 27 raw sharks while Cooking XP was still inside that window recorded 27 sharks as having been caught. Tracking bank *decreases* and claiming them against the inventory increase (§18 `[v8]`) is the missing mirror of this step. The lesson generalises: a safeguard that holds within one correlator says nothing about what the pools it doesn't claim are used for downstream.
@@ -1051,6 +1071,8 @@ Recommended internal confidence: `CONFIRMED`, `PROBABLE`, `UNKNOWN`.
 Only headline statistics should use CONFIRMED where precision matters. Preserve unknown inventory movements separately instead of forcing classification.
 
 `[v4]` Confirmed decision: `OTHER_INVENTORY_GAIN`/`OTHER_INVENTORY_LOSS` events (§18) are never surfaced to the user, not even as a count — consistent with §27's "prefer undercount over false attribution." They exist purely as an internal safety valve and a debugging aid (§45), not a UI element.
+
+**`[v9]` `OTHER_INVENTORY_LOSS` is now actually populated**, having been defined here and silently dropped in implementation — every unexplained decrease went to `ITEM_CONSUMED` instead. §18 `[v9]` has the full argument; the part that belongs here is what the bucket is *for*. It is not a lesser kind of consumption. It is the record that something left the inventory and the plugin does not know where it went, which is a different statement and must not be netted off account gain. Keeping it off the screen (above) and keeping it out of the arithmetic are the same decision: an unexplained movement should change no number the user reads.
 
 ## 51. ONE SOURCE OF TRUTH
 

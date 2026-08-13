@@ -151,6 +151,16 @@ public class ActivitySession
 		itemFlow.computeIfAbsent(itemId, ItemFlowEntry::new).addBanked(qty);
 	}
 
+	/** SPEC.md §18/§50 `[v9]`: gone with no explanation - never shown, never netted off. */
+	public void addOtherLoss(int itemId, int qty)
+	{
+		if (qty <= 0)
+		{
+			return;
+		}
+		itemFlow.computeIfAbsent(itemId, ItemFlowEntry::new).addOtherLoss(qty);
+	}
+
 	/** SPEC.md §22: how much of this item is still "dropped but not yet repicked" - the repickup offset. */
 	public int getOutstandingDropped(int itemId)
 	{

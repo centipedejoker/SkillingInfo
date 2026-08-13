@@ -38,6 +38,9 @@ public class BankCorrelatorTest
 		return m;
 	}
 
+	/** No item in these tests has a noted counterpart; §18 [v9] covers that separately. */
+	private static final IntUnaryOperator NO_NOTES = id -> -1;
+
 	/** Session holds `qty` of `itemId` outstanding, nothing else. */
 	private static IntUnaryOperator outstanding(int itemId, int qty)
 	{
@@ -52,7 +55,7 @@ public class BankCorrelatorTest
 		// player opens bank for the first time with a big existing stack
 		correlator.onBankChanged(bank(LOGS, 10_000));
 
-		Map<Integer, Integer> banked = correlator.resolve(decreases(LOGS, 10_000), outstanding(LOGS, 10_000));
+		Map<Integer, Integer> banked = correlator.resolve(decreases(LOGS, 10_000), outstanding(LOGS, 10_000), NO_NOTES).getCredited();
 		assertTrue("first bank observation must not be read as a deposit", banked.isEmpty());
 	}
 
@@ -63,7 +66,7 @@ public class BankCorrelatorTest
 		correlator.onBankChanged(bank(LOGS, 100));
 
 		correlator.onBankChanged(bank(LOGS, 128));
-		Map<Integer, Integer> banked = correlator.resolve(decreases(LOGS, 28), outstanding(LOGS, 28));
+		Map<Integer, Integer> banked = correlator.resolve(decreases(LOGS, 28), outstanding(LOGS, 28), NO_NOTES).getCredited();
 
 		assertEquals(Integer.valueOf(28), banked.get(LOGS));
 	}
@@ -77,7 +80,7 @@ public class BankCorrelatorTest
 		// player deposits 28 logs but only 5 of them were gathered this
 		// session - the other 23 were already carried
 		correlator.onBankChanged(bank(LOGS, 128));
-		Map<Integer, Integer> banked = correlator.resolve(decreases(LOGS, 28), outstanding(LOGS, 5));
+		Map<Integer, Integer> banked = correlator.resolve(decreases(LOGS, 28), outstanding(LOGS, 5), NO_NOTES).getCredited();
 
 		assertEquals("capped at session-outstanding, not the full deposit", Integer.valueOf(5), banked.get(LOGS));
 	}
@@ -91,7 +94,7 @@ public class BankCorrelatorTest
 		correlator.onBankChanged(bank(RUNE, 500));
 
 		correlator.onBankChanged(bank(RUNE, 1200));
-		Map<Integer, Integer> banked = correlator.resolve(Collections.emptyMap(), outstanding(RUNE, 999));
+		Map<Integer, Integer> banked = correlator.resolve(Collections.emptyMap(), outstanding(RUNE, 999), NO_NOTES).getCredited();
 
 		assertTrue("no inventory decrease means no confirmed deposit", banked.isEmpty());
 	}
@@ -105,7 +108,7 @@ public class BankCorrelatorTest
 		// bank goes down, inventory goes up - the deposit signature requires
 		// the opposite, so nothing should resolve
 		correlator.onBankChanged(bank(LOGS, 60));
-		Map<Integer, Integer> banked = correlator.resolve(Collections.emptyMap(), outstanding(LOGS, 40));
+		Map<Integer, Integer> banked = correlator.resolve(Collections.emptyMap(), outstanding(LOGS, 40), NO_NOTES).getCredited();
 
 		assertTrue(banked.isEmpty());
 	}
@@ -118,12 +121,12 @@ public class BankCorrelatorTest
 
 		// withdraw 40 (bank 100 -> 60), nothing resolves
 		correlator.onBankChanged(bank(LOGS, 60));
-		assertTrue(correlator.resolve(Collections.emptyMap(), outstanding(LOGS, 0)).isEmpty());
+		assertTrue(correlator.resolve(Collections.emptyMap(), outstanding(LOGS, 0), NO_NOTES).getCredited().isEmpty());
 
 		// put them straight back (bank 60 -> 100). The inventory decrease is
 		// real, but the session never acquired these, so outstanding is 0.
 		correlator.onBankChanged(bank(LOGS, 100));
-		Map<Integer, Integer> banked = correlator.resolve(decreases(LOGS, 40), outstanding(LOGS, 0));
+		Map<Integer, Integer> banked = correlator.resolve(decreases(LOGS, 40), outstanding(LOGS, 0), NO_NOTES).getCredited();
 
 		assertTrue("redepositing stock the session never acquired is not account gain", banked.isEmpty());
 	}
@@ -141,7 +144,7 @@ public class BankCorrelatorTest
 		invDecreases.put(RUNE, 30);
 		// only the logs were gathered this session; the runes came from
 		// somewhere else entirely
-		Map<Integer, Integer> banked = correlator.resolve(invDecreases, id -> id == LOGS ? 12 : 0);
+		Map<Integer, Integer> banked = correlator.resolve(invDecreases, id -> id == LOGS ? 12 : 0, NO_NOTES).getCredited();
 
 		assertEquals(Integer.valueOf(12), banked.get(LOGS));
 		assertTrue("unrelated item in the same Deposit All is not credited", !banked.containsKey(RUNE));
@@ -154,11 +157,13 @@ public class BankCorrelatorTest
 		correlator.onBankChanged(bank(LOGS, 0));
 
 		correlator.onBankChanged(bank(LOGS, 10));
-		assertEquals(Integer.valueOf(10), correlator.resolve(decreases(LOGS, 10), outstanding(LOGS, 25)).get(LOGS));
+		assertEquals(Integer.valueOf(10),
+			correlator.resolve(decreases(LOGS, 10), outstanding(LOGS, 25), NO_NOTES).getCredited().get(LOGS));
 
 		correlator.onBankChanged(bank(LOGS, 25));
 		// 10 already banked, so 15 still outstanding
-		assertEquals(Integer.valueOf(15), correlator.resolve(decreases(LOGS, 15), outstanding(LOGS, 15)).get(LOGS));
+		assertEquals(Integer.valueOf(15),
+			correlator.resolve(decreases(LOGS, 15), outstanding(LOGS, 15), NO_NOTES).getCredited().get(LOGS));
 	}
 
 	@Test
@@ -169,10 +174,10 @@ public class BankCorrelatorTest
 
 		// bank increases with no matching inventory decrease - unattributable
 		correlator.onBankChanged(bank(LOGS, 50));
-		assertTrue(correlator.resolve(Collections.emptyMap(), outstanding(LOGS, 50)).isEmpty());
+		assertTrue(correlator.resolve(Collections.emptyMap(), outstanding(LOGS, 50), NO_NOTES).getCredited().isEmpty());
 
 		// a later, unrelated inventory decrease must not retroactively claim it
-		Map<Integer, Integer> banked = correlator.resolve(decreases(LOGS, 50), outstanding(LOGS, 50));
+		Map<Integer, Integer> banked = correlator.resolve(decreases(LOGS, 50), outstanding(LOGS, 50), NO_NOTES).getCredited();
 		assertTrue("stale bank delta must not be matched by a later decrease", banked.isEmpty());
 	}
 }

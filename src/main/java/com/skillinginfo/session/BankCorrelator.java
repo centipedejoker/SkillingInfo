@@ -1,8 +1,11 @@
 package com.skillinginfo.session;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.IntUnaryOperator;
+import lombok.Getter;
 import net.runelite.api.Item;
 
 /**
@@ -73,33 +76,81 @@ public class BankCorrelator
 	}
 
 	/**
+	 * `[v9]` What one tick's bank increases account for, split two ways.
+	 * <p>
+	 * The distinction matters because <em>explaining</em> a movement and
+	 * <em>crediting</em> it are different questions, and conflating them was
+	 * a bug: depositing stock the session never acquired is capped to zero by
+	 * step 4's three-way minimum, correctly - but the inventory decrease was
+	 * then left in the pool and the consumption catch-all ate it. A deposit
+	 * of items you already had was recorded as having used them up.
+	 */
+	public static final class Resolution
+	{
+		/**
+		 * Inventory decreases accounted for by a deposit, whether or not the
+		 * session may claim them. Claimed out of the decrease pool so no
+		 * later rule can reinterpret them.
+		 */
+		@Getter
+		private final Map<Integer, Integer> explained = new HashMap<>();
+
+		/** §25a step 5: the attributable subset, capped at what the session holds. */
+		@Getter
+		private final Map<Integer, Integer> credited = new HashMap<>();
+	}
+
+	/**
 	 * SPEC.md §25a steps 3-6.
 	 *
 	 * @param invDecreasedThisTick inventory decreases for this tick, already
 	 * net of anything claimed by a more specific correlator (drops).
 	 * @param outstandingLookup itemId → how much of that item the session
 	 * acquired and still holds unbanked.
-	 * @return confirmed banked quantities, keyed by itemId.
+	 * @param unnotedId itemId → the id it is a note of, or -1. A bank stores
+	 * items unnoted, so a deposit of notes lands under a different key on the
+	 * two sides of the movement (§18 `[v9]`).
 	 */
-	public Map<Integer, Integer> resolve(Map<Integer, Integer> invDecreasedThisTick, IntUnaryOperator outstandingLookup)
+	public Resolution resolve(Map<Integer, Integer> invDecreasedThisTick,
+		IntUnaryOperator outstandingLookup, IntUnaryOperator unnotedId)
 	{
-		Map<Integer, Integer> confirmed = new HashMap<>();
+		Resolution resolution = new Resolution();
 		if (increased.isEmpty())
 		{
-			return confirmed;
+			return resolution;
 		}
 
 		for (Map.Entry<Integer, Integer> entry : increased.entrySet())
 		{
-			int itemId = entry.getKey();
+			int bankItemId = entry.getKey();
 			int bankDelta = entry.getValue();
-			int invDelta = invDecreasedThisTick.getOrDefault(itemId, 0);
-			int outstanding = outstandingLookup.applyAsInt(itemId);
 
-			int candidateBanked = Math.min(bankDelta, Math.min(invDelta, outstanding));
-			if (candidateBanked > 0)
+			// The inventory may have parted with this item under either id:
+			// the bank's own (unnoted), or the note of it.
+			for (int inventoryItemId : inventoryFormsOf(bankItemId, invDecreasedThisTick, unnotedId))
 			{
-				confirmed.put(itemId, candidateBanked);
+				if (bankDelta <= 0)
+				{
+					break;
+				}
+
+				int invDelta = invDecreasedThisTick.getOrDefault(inventoryItemId, 0);
+				int matched = Math.min(bankDelta, invDelta);
+				if (matched <= 0)
+				{
+					continue;
+				}
+				bankDelta -= matched;
+				resolution.explained.merge(inventoryItemId, matched, Integer::sum);
+
+				// §25a step 4: the three-way minimum. Capping here rather than
+				// above is the point - the movement is real either way, only
+				// the claim to it is limited.
+				int creditable = Math.min(matched, outstandingLookup.applyAsInt(inventoryItemId));
+				if (creditable > 0)
+				{
+					resolution.credited.merge(inventoryItemId, creditable, Integer::sum);
+				}
 			}
 		}
 
@@ -108,7 +159,26 @@ public class BankCorrelator
 		// keeping it around would only give a later tick a chance to
 		// misattribute it.
 		increased.clear();
-		return confirmed;
+		return resolution;
+	}
+
+	/**
+	 * The inventory-side ids a bank increase of {@code bankItemId} could have
+	 * come from: the id itself first, then any note of it.
+	 */
+	private static List<Integer> inventoryFormsOf(int bankItemId,
+		Map<Integer, Integer> invDecreasedThisTick, IntUnaryOperator unnotedId)
+	{
+		List<Integer> forms = new ArrayList<>(2);
+		forms.add(bankItemId);
+		for (Integer candidate : invDecreasedThisTick.keySet())
+		{
+			if (candidate != bankItemId && unnotedId.applyAsInt(candidate) == bankItemId)
+			{
+				forms.add(candidate);
+			}
+		}
+		return forms;
 	}
 
 	/**

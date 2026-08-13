@@ -1,6 +1,7 @@
 package com.skillinginfo.session;
 
 import net.runelite.api.Skill;
+import net.runelite.api.gameval.InventoryID;
 import net.runelite.api.gameval.ItemID;
 import org.junit.Test;
 import static com.skillinginfo.session.SessionManagerHarness.STARTED_TICK;
@@ -35,6 +36,8 @@ public class SessionManagerItemFlowTest
 	// gameval.ItemID has no constants for noted forms; 384 is what
 	// getLinkedNoteId() pairs with 383
 	private static final int RAW_SHARK_NOTED = 384;
+	private static final int COAL = ItemID.COAL;
+	private static final int LOOTING_BAG = InventoryID.LOOTING_BAG;
 
 	private static int generated(SessionManager m, int itemId)
 	{
@@ -139,7 +142,14 @@ public class SessionManagerItemFlowTest
 		// creditConsumption used to return before draining the equipment
 		// pool, so an equip outside the XP window sat there indefinitely and
 		// silently cancelled the next consumption of that item.
-		SessionManager m = startedSession(Skill.WOODCUTTING, items(AXE, 1), items(), items());
+		//
+		// The item pairing is deliberately synthetic - the pools are keyed by
+		// id and don't care which id it is, and this exercises the drain in
+		// the fewest events. What is not arbitrary is the skill: §18 [v9]
+		// only lets an activity consume when it has inputs, and Woodcutting
+		// has none, so asserting a consumption there would be asserting the
+		// nonsense that chopping uses up an axe.
+		SessionManager m = startedSession(Skill.COOKING, items(AXE, 1), items(), items());
 
 		// well past the XP window: equip the axe
 		m.onInventoryChanged(items());
@@ -151,11 +161,95 @@ public class SessionManagerItemFlowTest
 		m.onGameTick(24);
 
 		// XP resumes and that axe is genuinely used up
-		m.onStatChanged(Skill.WOODCUTTING, 400);
+		m.onStatChanged(Skill.COOKING, 400);
 		m.onInventoryChanged(items());
 		m.onGameTick(25);
 
 		assertEquals("the equip five ticks earlier explains nothing here", 1, consumed(m, AXE));
+	}
+
+	@Test
+	public void depositingStockTheSessionNeverAcquiredIsNotConsumption()
+	{
+		// §25a step 4 correctly credits nothing here - these sharks were held
+		// before the session began. The bug was what happened next: the
+		// inventory decrease was left in the pool and the consumption
+		// catch-all ate it, so a deposit was recorded as having used them up.
+		// Explaining a movement and crediting it are separate questions.
+		SessionManager m = startedSession(Skill.COOKING, items(RAW_SHARK_NOTED, 27), items(), items());
+
+		m.onStatChanged(Skill.COOKING, 400);
+		m.onBankChanged(items(RAW_SHARK, 27));
+		m.onInventoryChanged(items());
+		m.onGameTick(STARTED_TICK + 1);
+
+		assertNull("a deposit is not consumption", entry(m, RAW_SHARK_NOTED));
+		assertNull("and the unnoted id is the bank's, not the inventory's", entry(m, RAW_SHARK));
+	}
+
+	@Test
+	public void anActivityWithNoInputsRecordsAnUnexplainedLossNotConsumption()
+	{
+		// Deposit box, bank chest, GE collection box, group storage: the
+		// inventory decreases with no BANK container update at all. Chopping
+		// cannot use up a log, so this is §50's unexplained loss - which,
+		// unlike consumption, is never netted off account gain.
+		SessionManager m = startedSession(Skill.WOODCUTTING, items(LOGS, 27), items(), items());
+
+		m.onStatChanged(Skill.WOODCUTTING, 400);
+		m.onInventoryChanged(items());
+		m.onGameTick(STARTED_TICK + 1);
+
+		assertEquals("woodcutting has no inputs", 0, consumed(m, LOGS));
+		assertEquals(27, entry(m, LOGS).getOtherLoss());
+	}
+
+	@Test
+	public void stowingOutputInAContainerlessBagStillCountsAsRetained()
+	{
+		// The coal bag case that made a fully banked 27-coal trip report
+		// `RETAINED 0.0% - 0 kept, 27 lost`.
+		SessionManager m = startedSession(Skill.MINING);
+		int xp = 300;
+		int tick = STARTED_TICK;
+		for (int i = 1; i <= 27; i++)
+		{
+			tick += 2; // mine a coal
+			xp += 50;
+			m.onStatChanged(Skill.MINING, xp);
+			m.onInventoryChanged(items(COAL, 1));
+			m.onGameTick(tick);
+
+			tick += 1; // ...and stow it, still mining
+			m.onInventoryChanged(items());
+			m.onGameTick(tick);
+		}
+
+		ItemFlowEntry coal = entry(m, COAL);
+		assertEquals(27, coal.getGenerated());
+		assertEquals("mining consumes nothing", 0, coal.getConsumed());
+		assertEquals(27, coal.getOtherLoss());
+		assertEquals("the coal is in the bag, not destroyed", 27, coal.getNetRetained());
+		assertEquals("a full trip reads as a full trip",
+			1.0, m.getCurrentSession().getRetentionRate(), 0.0001);
+	}
+
+	@Test
+	public void stowingInAContainerRuneliteExposesIsClaimedOutright()
+	{
+		// Where a real container exists there is no ambiguity to resolve -
+		// it is claimed like the worn container, so nothing reaches either
+		// catch-all and no unexplained loss is recorded at all.
+		SessionManager m = startedSession(Skill.WOODCUTTING, items(LOGS, 5), items(), items());
+
+		m.onStatChanged(Skill.WOODCUTTING, 400);
+		m.onInventoryChanged(items());
+		m.onSideContainerChanged(LOOTING_BAG, items());          // baseline
+		m.onSideContainerChanged(LOOTING_BAG, items(LOGS, 5));   // ...now holding them
+		m.onGameTick(STARTED_TICK + 1);
+
+		assertEquals(0, consumed(m, LOGS));
+		assertNull("a claimed transfer is explained outright, not bucketed", entry(m, LOGS));
 	}
 
 	// ------------------------------------------------------------------
