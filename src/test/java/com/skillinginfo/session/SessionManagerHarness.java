@@ -2,7 +2,9 @@ package com.skillinginfo.session;
 
 import com.skillinginfo.SkillingInfoConfig;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import net.runelite.api.Item;
 import net.runelite.api.Skill;
 import static org.junit.Assert.assertEquals;
@@ -26,6 +28,26 @@ final class SessionManagerHarness
 	{
 	}
 
+	/**
+	 * Noted → unnoted pairings for the ids the tests use. In production this
+	 * comes from {@code ItemComposition.getNote()/getLinkedNoteId()} on the
+	 * client thread; stating it here keeps a test's intent legible instead of
+	 * relying on the +1 convention holding, which it does not universally.
+	 */
+	private static final Map<Integer, Integer> NOTED_TO_UNNOTED = new HashMap<>();
+
+	static
+	{
+		NOTED_TO_UNNOTED.put(384, 383);   // raw shark
+		NOTED_TO_UNNOTED.put(1512, 1511); // logs
+		NOTED_TO_UNNOTED.put(454, 453);   // coal
+	}
+
+	static int unnotedId(int itemId)
+	{
+		return NOTED_TO_UNNOTED.getOrDefault(itemId, -1);
+	}
+
 	static SessionManager manager()
 	{
 		SkillingInfoConfig config = new SkillingInfoConfig()
@@ -46,7 +68,8 @@ final class SessionManagerHarness
 		};
 		// ItemUseStore's ConfigManager is only touched when a session is
 		// finalised, which no test here does
-		return new SessionManager(config, repository, new ItemUseStore(null));
+		return new SessionManager(config, repository, new ItemUseStore(null),
+			SessionManagerHarness::unnotedId);
 	}
 
 	static Item[] items(int... idQtyPairs)

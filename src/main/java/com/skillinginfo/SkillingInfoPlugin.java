@@ -20,6 +20,7 @@ import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
+import net.runelite.api.ItemComposition;
 import net.runelite.api.MenuAction;
 import net.runelite.api.TileItem;
 import net.runelite.api.coords.WorldPoint;
@@ -87,6 +88,11 @@ public class SkillingInfoPlugin extends Plugin
 	// directly (caught live: SPEC.md v7 changelog).
 	private final Map<Integer, String> itemNames = new ConcurrentHashMap<>();
 
+	// §18 [v9]: itemId → the id it is a note of, or -1. Memoised because
+	// resolving it means an ItemComposition lookup, and this is consulted
+	// from the per-tick item-flow correlation.
+	private final Map<Integer, Integer> unnotedIds = new ConcurrentHashMap<>();
+
 	private ItemUseStore itemUseStore;
 	private SessionRepository sessionRepository;
 	private SessionManager sessionManager;
@@ -104,7 +110,7 @@ public class SkillingInfoPlugin extends Plugin
 	{
 		itemUseStore = new ItemUseStore(configManager);
 		sessionRepository = new SessionRepository(client);
-		sessionManager = new SessionManager(config, sessionRepository, itemUseStore);
+		sessionManager = new SessionManager(config, sessionRepository, itemUseStore, this::unnotedId);
 		sessionManager.init();
 
 		BufferedImage icon = buildIcon();
@@ -195,6 +201,28 @@ public class SkillingInfoPlugin extends Plugin
 		{
 			resolveItemNames(session);
 		}
+	}
+
+	/**
+	 * §18 `[v9]`: the id {@code itemId} is a note of, or -1 if it isn't a
+	 * note. Lets the bank correlation pair a "withdraw as note" with the
+	 * different id that actually lands in the inventory.
+	 * <p>
+	 * Deliberately only the note→item direction. RuneLite's own
+	 * {@code ItemManager.canonicalize} reads {@code getLinkedNoteId()}
+	 * exclusively behind a {@code getNote() != -1} guard, so that is the only
+	 * direction the API is documented by usage to answer; asking an unnoted
+	 * item for its noted form is unspecified.
+	 * <p>
+	 * Client thread only, via {@code getItemComposition}. Every caller
+	 * reaches it through {@code onGameTick}, which is already on it.
+	 */
+	private int unnotedId(int itemId)
+	{
+		return unnotedIds.computeIfAbsent(itemId, id -> {
+			ItemComposition composition = itemManager.getItemComposition(id);
+			return composition.getNote() != -1 ? composition.getLinkedNoteId() : -1;
+		});
 	}
 
 	private void resolveItemNames(ActivitySession session)

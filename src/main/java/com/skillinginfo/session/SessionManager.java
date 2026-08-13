@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import lombok.Getter;
+import java.util.function.IntUnaryOperator;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Item;
 import net.runelite.api.Skill;
@@ -123,11 +124,23 @@ public class SessionManager
 	@Getter
 	private boolean slayerTaskVisible;
 
-	public SessionManager(SkillingInfoConfig config, SessionRepository repository, ItemUseStore itemUseStore)
+	/**
+	 * `[v9]` itemId → the id this one is a *note of*, or -1 when it isn't a
+	 * note. Supplied as a function rather than resolved here because the
+	 * answer comes from {@code ItemManager}, which asserts the client thread -
+	 * and {@code session/} deliberately depends on neither the client nor the
+	 * UI. The plugin memoises it; every call site here is already on the
+	 * client thread.
+	 */
+	private final IntUnaryOperator unnotedId;
+
+	public SessionManager(SkillingInfoConfig config, SessionRepository repository,
+		ItemUseStore itemUseStore, IntUnaryOperator unnotedId)
 	{
 		this.config = config;
 		this.repository = repository;
 		this.itemUseStore = itemUseStore;
+		this.unnotedId = unnotedId;
 	}
 
 	public void init()
@@ -511,7 +524,7 @@ public class SessionManager
 		// ones: a second container moving the item is stronger evidence than
 		// a menu click, which only says what the player asked for.
 		claim(increased, unequipped);
-		claim(increased, withdrawn);
+		claimWithNotes(increased, withdrawn);
 		claim(decreased, equipped);
 
 		if (!increased.isEmpty() || !decreased.isEmpty())
@@ -629,19 +642,70 @@ public class SessionManager
 	{
 		for (Map.Entry<Integer, Integer> entry : claimed.entrySet())
 		{
-			Integer remaining = pool.get(entry.getKey());
-			if (remaining == null)
+			claimOne(pool, entry.getKey(), entry.getValue());
+		}
+	}
+
+	/**
+	 * Claims {@code qty} of one item out of {@code pool}.
+	 *
+	 * @return how much of {@code qty} the pool could not account for
+	 */
+	private static int claimOne(Map<Integer, Integer> pool, int itemId, int qty)
+	{
+		Integer available = pool.get(itemId);
+		if (available == null)
+		{
+			return qty;
+		}
+		int left = available - qty;
+		if (left > 0)
+		{
+			pool.put(itemId, left);
+			return 0;
+		}
+		pool.remove(itemId);
+		return -left;
+	}
+
+	/**
+	 * `[v9]` {@link #claim}, but tolerant of the noted/unnoted split.
+	 * <p>
+	 * A bank stores items unnoted. Withdrawing "as note" puts a *different*
+	 * item id in the inventory, so the two halves of one movement don't share
+	 * a key and a plain claim can't pair them - the withdrawal went unclaimed
+	 * and §16's catch-all booked the arriving notes as skilling output. That
+	 * is §18 `[v8]`'s bug surviving on a path its fix didn't reach.
+	 * <p>
+	 * Only the note→item direction is ever asked for, because it is the only
+	 * one RuneLite itself trusts: {@code ItemManager.canonicalize} reads
+	 * {@code getLinkedNoteId()} exclusively behind a {@code getNote() != -1}
+	 * guard. So rather than ask what the noted form of a bank id is, this
+	 * looks through the pool for a key that is a note *of* the claimed id.
+	 * The pool holds a handful of ids per tick, so the scan is free.
+	 */
+	private void claimWithNotes(Map<Integer, Integer> pool, Map<Integer, Integer> claimed)
+	{
+		for (Map.Entry<Integer, Integer> entry : claimed.entrySet())
+		{
+			int unaccounted = claimOne(pool, entry.getKey(), entry.getValue());
+			if (unaccounted <= 0)
 			{
 				continue;
 			}
-			int left = remaining - entry.getValue();
-			if (left > 0)
+
+			Integer notedForm = null;
+			for (Integer key : pool.keySet())
 			{
-				pool.put(entry.getKey(), left);
+				if (key != entry.getKey() && unnotedId.applyAsInt(key) == entry.getKey())
+				{
+					notedForm = key;
+					break;
+				}
 			}
-			else
+			if (notedForm != null)
 			{
-				pool.remove(entry.getKey());
+				claimOne(pool, notedForm, unaccounted);
 			}
 		}
 	}

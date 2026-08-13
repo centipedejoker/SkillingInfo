@@ -8,6 +8,7 @@ import static com.skillinginfo.session.SessionManagerHarness.entry;
 import static com.skillinginfo.session.SessionManagerHarness.items;
 import static com.skillinginfo.session.SessionManagerHarness.startedSession;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
 /**
  * Tick-ordering coverage for {@link SessionManager#creditItemFlow} - the one
@@ -31,6 +32,9 @@ public class SessionManagerItemFlowTest
 	private static final int GLORY = ItemID.AMULET_OF_GLORY;
 	private static final int LOGS = ItemID.LOGS;
 	private static final int RAW_SHARK = ItemID.RAW_SHARK;
+	// gameval.ItemID has no constants for noted forms; 384 is what
+	// getLinkedNoteId() pairs with 383
+	private static final int RAW_SHARK_NOTED = 384;
 
 	private static int generated(SessionManager m, int itemId)
 	{
@@ -95,6 +99,23 @@ public class SessionManagerItemFlowTest
 		m.onGameTick(STARTED_TICK + 1);
 
 		assertEquals("withdrawing raw sharks is not catching them", 0, generated(m, RAW_SHARK));
+	}
+
+	@Test
+	public void aNotedWithdrawalIsNotSkillingOutput()
+	{
+		// A bank stores items unnoted; withdrawing "as note" puts a different
+		// id in the inventory, so the two halves of one movement don't share
+		// a key. §18 `[v8]` fixed the unnoted path and left this one live.
+		SessionManager m = startedSession(Skill.COOKING, items(), items(), items(RAW_SHARK, 27));
+
+		m.onStatChanged(Skill.COOKING, 400);
+		m.onBankChanged(items());
+		m.onInventoryChanged(items(RAW_SHARK_NOTED, 27));
+		m.onGameTick(STARTED_TICK + 1);
+
+		assertNull("a withdrawal is not output, noted or otherwise", entry(m, RAW_SHARK_NOTED));
+		assertNull("and nothing lands against the unnoted id either", entry(m, RAW_SHARK));
 	}
 
 	@Test
