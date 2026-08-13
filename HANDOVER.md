@@ -9,7 +9,7 @@ that already cost real time once.
 
 ## 1. Where it stands
 
-A working RuneLite plugin: 33 source files, 108 passing tests, 63 commits.
+A working RuneLite plugin: 33 source files, 110 passing tests, 64 commits.
 Every phase in `SPEC.md` §61 is built, and everything except parts of Phase 5
 has been validated in live gameplay by the owner.
 
