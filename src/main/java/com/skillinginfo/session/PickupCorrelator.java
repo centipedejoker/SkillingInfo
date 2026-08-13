@@ -48,9 +48,26 @@ public class PickupCorrelator
 	}
 
 	/**
+	 * How much of an inventory increase is backed by the item actually
+	 * leaving the ground (§20a step 3).
+	 */
+	@FunctionalInterface
+	public interface GroundEvidence
+	{
+		int claim(int itemId, int qty);
+	}
+
+	/**
+	 * @param evidence caps each confirmation at what the ground can account
+	 * for. `[v9]` Without it a click alone was enough, and §20a step 3's
+	 * requirement that "a stale pending entry must never match a later
+	 * unrelated increase of the same item" was unenforced - a Take click
+	 * that never resolved sat pending for eighteen seconds and then claimed
+	 * the next log the player chopped.
 	 * @return confirmed pickup quantities for this tick, keyed by itemId.
 	 */
-	public Map<Integer, Integer> resolve(int currentTick, Map<Integer, Integer> increasedThisTick)
+	public Map<Integer, Integer> resolve(int currentTick, Map<Integer, Integer> increasedThisTick,
+		GroundEvidence evidence)
 	{
 		while (!pending.isEmpty() && currentTick - pending.peekFirst().clickTick > TIMEOUT_TICKS)
 		{
@@ -64,12 +81,21 @@ public class PickupCorrelator
 			while (it.hasNext())
 			{
 				PendingPickup pendingPickup = it.next();
-				if (pendingPickup.itemId == entry.getKey())
+				if (pendingPickup.itemId != entry.getKey())
 				{
-					confirmed.merge(entry.getKey(), entry.getValue(), Integer::sum);
-					it.remove();
+					continue;
+				}
+
+				int backed = evidence.claim(entry.getKey(), entry.getValue());
+				if (backed <= 0)
+				{
+					// the click stays pending: it may still be walking, and
+					// this increase was simply something else
 					break;
 				}
+				confirmed.merge(entry.getKey(), backed, Integer::sum);
+				it.remove();
+				break;
 			}
 		}
 		return confirmed;

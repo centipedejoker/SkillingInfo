@@ -407,14 +407,25 @@ public class SessionManager
 		groundItemTracker.onItemSpawned(point, item);
 	}
 
-	public void onGroundItemQuantityChanged(WorldPoint point, TileItem item)
+	public void onGroundItemQuantityChanged(WorldPoint point, TileItem item, int oldQuantity, int newQuantity)
 	{
-		groundItemTracker.onItemQuantityChanged(point, item);
+		groundItemTracker.onItemQuantityChanged(point, item, oldQuantity, newQuantity, currentTick);
 	}
 
 	public void onGroundItemDespawned(WorldPoint point, TileItem item)
 	{
-		groundItemTracker.onItemDespawned(point, item);
+		groundItemTracker.onItemDespawned(point, item, currentTick);
+	}
+
+	/**
+	 * §48 `[v9]`: the scene went away, so every tile the tracker holds is
+	 * stale. RuneLite core clears its own ground-item state the same way
+	 * rather than relying on despawn events, which are not guaranteed for an
+	 * unloaded region.
+	 */
+	public void onWorldViewUnloaded()
+	{
+		groundItemTracker.clear();
 	}
 
 	/**
@@ -659,7 +670,8 @@ public class SessionManager
 			return;
 		}
 
-		Map<Integer, Integer> confirmedPickups = pickupCorrelator.resolve(currentTick, increased);
+		Map<Integer, Integer> confirmedPickups = pickupCorrelator.resolve(currentTick, increased,
+			(itemId, qty) -> groundItemTracker.claimDisappeared(itemId, currentTick, qty));
 		claim(increased, confirmedPickups);
 		for (Map.Entry<Integer, Integer> entry : confirmedPickups.entrySet())
 		{
@@ -1247,6 +1259,7 @@ public class SessionManager
 		dropCorrelator.reset();
 		pickupCorrelator.reset();
 		bankCorrelator.reset();
+		groundItemTracker.clear();
 		manuallyPaused = false;
 		state = SessionState.IDLE;
 	}

@@ -204,7 +204,17 @@ public class ActivitySession
 	public double getRetentionRate()
 	{
 		int generated = getTotalGenerated();
-		return generated <= 0 ? -1 : getTotalNetRetained() / (double) generated;
+		if (generated <= 0)
+		{
+			return -1;
+		}
+		// `[v9]` Capped at 1.0. The question this answers is "of what this
+		// activity produced, how much did I keep", and there is no coherent
+		// answer above all of it - yet net retained counts ground pickups
+		// while the denominator doesn't, so picking up items the session
+		// didn't produce pushed the headline over 100%. The bar was already
+		// clamped, so the number beside it was simply disagreeing with it.
+		return Math.min(1.0, getTotalNetRetained() / (double) generated);
 	}
 
 	/** Never null, so callers don't have to special-case pre-v2 records. */

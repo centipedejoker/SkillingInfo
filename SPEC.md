@@ -602,6 +602,17 @@ Multiple identical stackable ground items from different sources on one tile (e.
 - Coin piles and other structurally indistinguishable stacks are always `SESSION_AGGREGATE`.
 - Per-monster loot-flow displays (§37) render only `PER_DROP` lines individually; everything else rolls into the session total. This makes §27's "undercount over false-attribute" principle an actual mechanism rather than a stated intent.
 
+**`[v9]` Step 3 is now enforced: a pickup is confirmed by ground evidence, not by the click.** The implementation correlated a "Take" click against an inventory increase of the same item id and nothing else, which left this section's own requirement — that a stale pending entry must never match a later unrelated increase of the same item — as an unenforced intention. A click that failed (contested tile, full inventory, interrupted walk) stayed pending for its full 18-second window and then claimed the next log the player *chopped*.
+
+The damage went further than a mislabelled row. Pickups are claimed before the generation catch-all, correctly, so the stolen quantity moved out of `generated` and into `pickedUp` — and because net retained counts pickups while §32's retention denominator does not, the panel rendered `RETAINED 125.0%`. `Ui.Bar` clamped the bar, so the number was visibly disagreeing with the graphic beside it.
+
+`GroundItemTracker` now records what actually left the ground — despawns and quantity decreases, with a short evidence window — and a confirmation is capped at what it can account for. This is what the tracker was built for: until v9 nothing read it at all, `get()` had no callers anywhere in the source, and it was never cleared. It is now also dropped on `WorldViewUnloaded` and at session end, since RuneLite core doesn't trust despawn events for unloaded regions either.
+
+§32's ratio is separately capped at 100%. Genuine pickups of items the session never produced can still push the numerator past the denominator, and "of what this activity produced, how much did I keep" has no coherent answer above all of it.
+
+**Playtest note:** this tightens a path that was validated in live play, so the failure mode has changed direction. If ground events prove less reliable than assumed, genuine pickups will be under-confirmed rather than over-confirmed — for combat that means loot never counting as acquired. Worth watching on a Slayer trip.
+
+
 ## 21. DROPPING ITEMS
 
 Dropping is a first-class session event. High-confidence model:

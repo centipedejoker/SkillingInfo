@@ -39,6 +39,7 @@ import net.runelite.api.events.ItemQuantityChanged;
 import net.runelite.api.events.ItemSpawned;
 import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.api.events.StatChanged;
+import net.runelite.api.events.WorldViewUnloaded;
 import net.runelite.api.gameval.InventoryID;
 import net.runelite.http.api.loottracker.LootRecordType;
 import net.runelite.client.callback.ClientThread;
@@ -418,7 +419,8 @@ public class SkillingInfoPlugin extends Plugin
 	public void onItemQuantityChanged(ItemQuantityChanged event)
 	{
 		WorldPoint point = event.getTile().getWorldLocation();
-		sessionManager.onGroundItemQuantityChanged(point, event.getItem());
+		sessionManager.onGroundItemQuantityChanged(point, event.getItem(),
+			event.getOldQuantity(), event.getNewQuantity());
 	}
 
 	@Subscribe
@@ -426,6 +428,12 @@ public class SkillingInfoPlugin extends Plugin
 	{
 		WorldPoint point = event.getTile().getWorldLocation();
 		sessionManager.onGroundItemDespawned(point, event.getItem());
+	}
+
+	@Subscribe
+	public void onWorldViewUnloaded(WorldViewUnloaded event)
+	{
+		sessionManager.onWorldViewUnloaded();
 	}
 
 	@Subscribe
